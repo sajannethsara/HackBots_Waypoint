@@ -1,0 +1,25 @@
+{
+  "name": "waypoint",
+  "private": true,
+  "packageManager": "pnpm@10.7.1",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "turbo run dev --filter=./apps/* --filter=./packages/*",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "db:up": "docker compose up -d db",
+    "db:migrate": "pnpm --filter @waypoint/db migrate:dev",
+    "db:seed": "pnpm --filter @waypoint/db seed",
+    "db:reset": "pnpm --filter @waypoint/db reset",
+    "db:studio": "pnpm --filter @waypoint/db studio",
+    "plan:task2b": "pnpm --filter @waypoint/engine task2b",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.8",
+    "typescript": "5.9.3"
+  }
+}

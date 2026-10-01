@@ -1,0 +1,17 @@
+{
+  "name": "@waypoint/engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pure planning & allocation engine. No I/O — feed it data, get an explainable plan.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "task2b": "tsx src/cli/task2b.ts"
+  },
+  "dependencies": { "@waypoint/shared": "workspace:*" },
+  "devDependencies": { "typescript": "5.9.3", "vitest": "^3.2.4", "tsx": "^4.20.6", "@types/node": "^22.18.0" }
+}

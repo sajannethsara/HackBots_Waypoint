@@ -1,0 +1,12 @@
+node_modules
+dist
+.next
+.turbo
+coverage
+*.tsbuildinfo
+.env
+.env.local
+!.env.example
+next-env.d.ts
+# competition material (not ours to publish)
+Challenge Booklet.pdf
