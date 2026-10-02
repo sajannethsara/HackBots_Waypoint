@@ -1,5 +1,6 @@
 "use client"
 
+import { usePathname } from "next/navigation"
 import { createContext, useCallback, useContext, useMemo, useState } from "react"
 import { Boxes, MessageSquare, Store, Truck } from "lucide-react"
 import type { IssueParticipant, Role } from "@waypoint/shared"
@@ -29,26 +30,29 @@ export function useChatSheet() {
 
 /** A chat in a right-hand sheet that any screen can open, so the dispatcher never leaves what they are doing. */
 export function ChatSheetProvider({ children }: { children: React.ReactNode }) {
-  const [shown, setShown] = useState(false)
+  // The sheet belongs to the page it was opened on: navigating (e.g. via a mention) closes it.
+  const pathname = usePathname()
+  const [openedOn, setOpenedOn] = useState<string | null>(null)
+  const shown = openedOn === pathname
   const [conversationId, setConversationId] = useState<string | null>(null)
   const openConversation = useOpenConversation()
   const { mutate } = openConversation
 
   const open = useCallback(
     (a: OpenArgs) => {
-      setShown(true)
+      setOpenedOn(pathname)
       if (a.conversationId) return setConversationId(a.conversationId)
       setConversationId(null)
-      mutate({ memberId: a.memberId, issueId: a.issueId }, { onSuccess: (c) => setConversationId(c.id), onError: () => setShown(false) })
+      mutate({ memberId: a.memberId, issueId: a.issueId }, { onSuccess: (c) => setConversationId(c.id), onError: () => setOpenedOn(null) })
     },
-    [mutate],
+    [mutate, pathname],
   )
   const value = useMemo(() => ({ open }), [open])
 
   return (
     <Ctx.Provider value={value}>
       {children}
-      <Sheet open={shown} onOpenChange={setShown}>
+      <Sheet open={shown} onOpenChange={(o) => !o && setOpenedOn(null)}>
         <SheetContent side="right" className="w-full gap-0 p-0 data-[side=right]:sm:max-w-md">
           <SheetTitle className="sr-only">Conversation</SheetTitle>
           <SheetDescription className="sr-only">Chat with someone involved in this work</SheetDescription>

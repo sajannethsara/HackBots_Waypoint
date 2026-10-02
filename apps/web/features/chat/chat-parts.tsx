@@ -38,12 +38,12 @@ export function counterpart(viewer: Role, c: ConversationSummary): ChatPerson {
 const MENTION_ICON: Record<MentionType, LucideIcon> = { issue: CircleAlert, trip: Route, outlet: Store, vehicle: Truck, order: ClipboardList }
 export const mentionIcon = (t: MentionType) => MENTION_ICON[t]
 
-/** Only dispatcher screens exist for these; other roles see the chip without a link. */
-function mentionHref(m: MentionRef, viewer: Role) {
-  if (viewer !== "DISPATCHER") return null
-  if (m.type === "trip") return `/dispatcher/trips/${m.id}`
-  if (m.type === "issue") return `/dispatcher/issues/${m.id}`
-  return null
+/** Every mentionable thing has a detail page under the dispatcher workspace. */
+const MENTION_ROUTE: Record<MentionType, string> = { issue: "issues", trip: "trips", outlet: "outlets", vehicle: "vehicles", order: "orders" }
+
+/** Only the dispatcher has these screens; other roles see the chip without a link. */
+export function mentionHref(m: MentionRef, viewer: Role) {
+  return viewer === "DISPATCHER" ? `/dispatcher/${MENTION_ROUTE[m.type]}/${encodeURIComponent(m.id)}` : null
 }
 
 export function MentionChip({ mention, viewer, onBrand }: { mention: MentionRef; viewer: Role; onBrand?: boolean }) {
