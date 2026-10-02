@@ -10,11 +10,15 @@ import type {
   DemandOverview,
   IssueDetail,
   IssuesResponse,
+  OrderDetail,
   OrdersResponse,
+  OutletDetail,
+  OutletOverviewRow,
   Plan,
   TripDetail,
   TripsResponse,
   Vehicle,
+  VehicleDetail,
 } from "@/lib/types"
 
 /** All dispatcher data access in one place: query keys, fetchers and mutations. */
@@ -249,4 +253,28 @@ export function useResolveIssue(id: string) {
     },
     onError,
   })
+}
+
+// ── Resources: vehicles, outlets, orders ──────────────────
+
+export function useVehicleDetail(id: string) {
+  return useQuery({ queryKey: ["vehicle", id], queryFn: () => api<VehicleDetail>(`/vehicles/${id}`) })
+}
+
+export function useOutletsOverview(q: string) {
+  const { depotId, date, ready } = useWorkspace()
+  return useQuery({
+    queryKey: ["outlets", depotId, date, q],
+    queryFn: () => api<OutletOverviewRow[]>(`/outlets/overview${qs({ depotId, date, q })}`),
+    enabled: ready,
+    placeholderData: (prev) => prev,
+  })
+}
+
+export function useOutletDetail(id: string) {
+  return useQuery({ queryKey: ["outlet", id], queryFn: () => api<OutletDetail>(`/outlets/${id}`) })
+}
+
+export function useOrderDetail(id: string) {
+  return useQuery({ queryKey: ["order", id], queryFn: () => api<OrderDetail>(`/orders/${id}`) })
 }

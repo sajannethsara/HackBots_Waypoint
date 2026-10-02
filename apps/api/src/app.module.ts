@@ -11,6 +11,8 @@ import { HealthModule } from "./modules/health/health.module"
 import { IssuesModule } from "./modules/issues/issues.module"
 import { LiveModule } from "./modules/live/live.module"
 import { TripsModule } from "./modules/trips/trips.module"
+import { OutletsModule } from "./modules/outlets/outlets.module"
+import { VehiclesModule } from "./modules/vehicles/vehicles.module"
 import { OrdersModule } from "./modules/orders/orders.module"
 import { PlanningModule } from "./modules/planning/planning.module"
 import { ReferenceModule } from "./modules/reference/reference.module"
@@ -34,6 +36,8 @@ import { ReferenceModule } from "./modules/reference/reference.module"
     IssuesModule,
     ChatModule,
     TripsModule,
+    VehiclesModule,
+    OutletsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })

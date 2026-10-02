@@ -57,7 +57,7 @@ export const NAV: Record<Role, NavGroup[]> = {
       label: "Resources",
       items: [
         { title: "Vehicles", href: "/dispatcher/vehicles", icon: Truck },
-        { title: "Outlets", href: "/dispatcher/outlets", icon: Store, soon: true },
+        { title: "Outlets", href: "/dispatcher/outlets", icon: Store },
       ],
     },
     {

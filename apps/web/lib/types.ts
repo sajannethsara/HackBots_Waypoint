@@ -403,3 +403,165 @@ export interface TripDetail {
   issues: (Omit<IssueRow, "trip" | "order" | "outlet"> & { stop: { seq: number } | null })[]
   audit: AuditEntry[]
 }
+
+// ── Resource detail pages (vehicles, outlets, orders) ──
+
+export interface IssueChip {
+  id: string
+  ref: string
+  type: IssueType
+  severity: IssueSeverity
+  status: IssueStatus
+  createdAt: string
+  tripId: string | null
+}
+
+export interface VehicleTripRow {
+  id: string
+  ref: string
+  tripNo: number
+  date: string
+  brand: Brand
+  districtId: string
+  status: string
+  driver: string | null
+  stops: number
+  openIssues: number
+  plannedDepartMin: number
+  plannedDurationMin: number
+  plannedKm: number
+  plannedFuelL: number
+  utilPct: number
+}
+
+export interface VehicleDetail {
+  vehicle: Vehicle & {
+    fuelType: string
+    depot: { id: string; name: string }
+    driver: { id: string; name: string; phone: string | null; email: string } | null
+  }
+  operatingDate: string
+  stats: { trips: number; completedTrips: number; activeDays: number; stops: number; km: number; fuelL: number; avgUtilPct: number | null; openIssues: number }
+  fuelWeek: { isoYear: number; isoWeek: number; litres: number; km: number; quotaL: number } | null
+  history: VehicleTripRow[]
+  issues: IssueChip[]
+}
+
+export interface OutletTodayStop {
+  orderId: string
+  orderRef: string
+  status: string
+  units: number
+  deferCount: number
+  trip: { id: string; ref: string; vehicleId: string } | null
+  stopSeq: number | null
+  plannedArrivalMin: number | null
+}
+
+export interface OutletOverviewRow {
+  id: string
+  name: string
+  brand: Brand
+  districtId: string
+  windowOpenMin: number
+  windowCloseMin: number
+  parkingConstraint: ParkingConstraint
+  lastDeliveredOn: string | null
+  openIssues: number
+  today: OutletTodayStop | null
+}
+
+export interface OutletOrderRow {
+  id: string
+  ref: string
+  brand: Brand
+  temp: "CHILLED" | "AMBIENT"
+  status: string
+  units: number
+  weightKg: number
+  volumeM3: number
+  deferCount: number
+  requestedDate: string
+  deliveryDate: string
+  receipt: { status: string } | null
+  stop: { seq: number; status: string; plannedArrivalMin: number; trip: { id: string; ref: string; vehicleId: string } } | null
+}
+
+export interface OutletDetail {
+  outlet: OutletLite & {
+    brand: Brand
+    lat: number | null
+    lng: number | null
+    depotId: string
+    depot: { id: string; name: string }
+    district: { id: string }
+    managers: { id: string; name: string; phone: string | null; email: string }[]
+    windowOpenMin: number
+    windowCloseMin: number
+  }
+  stats: { orders: number; units: number; weightKg: number; delivered: number; refused: number; deferrals: number; openIssues: number }
+  orders: OutletOrderRow[]
+  issues: IssueChip[]
+}
+
+export interface OrderDetail {
+  id: string
+  ref: string
+  brand: Brand
+  temp: "CHILLED" | "AMBIENT"
+  status: string
+  units: number
+  weightKg: number
+  volumeM3: number
+  deferCount: number
+  requestedDate: string
+  deliveryDate: string
+  submittedAt: string
+  notes: string | null
+  createdBy: { name: string }
+  depot: { id: string; name: string }
+  outlet: OutletLite & {
+    brand: Brand
+    dockType: DockType
+    parkingConstraint: ParkingConstraint
+    lastDeliveredOn: string | null
+    managers: { id: string; name: string; phone: string | null }[]
+  }
+  lines: OrderLine[]
+  decisions: {
+    id: string
+    decision: "SERVED" | "DEFERRED"
+    source: string
+    priorityScore: number
+    scoreBreakdown: Record<string, unknown>
+    reason: DeferralReason | null
+    explanation: string | null
+    note: string | null
+    createdAt: string
+    plan: { version: number; status: string; date: string }
+    overriddenBy: { name: string } | null
+  }[]
+  stops: {
+    id: string
+    seq: number
+    status: string
+    plannedArrivalMin: number
+    etaMin: number | null
+    atRisk: boolean
+    riskReason: string | null
+    completedAt: string | null
+    proof: { recipientName: string | null; capturedAt: string } | null
+    trip: {
+      id: string
+      ref: string
+      vehicleId: string
+      status: string
+      plannedDepartMin: number
+      driver: { name: string; phone: string | null } | null
+      plan: { status: string; version: number; date: string; depotId: string }
+    }
+  }[]
+  receipt: { status: string; notes: string | null; confirmedAt: string; confirmedBy: { name: string } } | null
+  issues: IssueChip[]
+  audit: { id: string; action: string; at: string; actor: string; entityType: string; after: unknown }[]
+}

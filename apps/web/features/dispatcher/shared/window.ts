@@ -2,7 +2,7 @@ import { formatWindow } from "@waypoint/shared"
 import type { OutletLite } from "@/lib/types"
 
 /** Receiving window shown to the dispatcher: outlet window ∩ mall window. */
-export function outletWindow(o: OutletLite) {
+export function outletWindow(o: Pick<OutletLite, "windowOpenMin" | "windowCloseMin" | "mallWindowOpenMin" | "mallWindowCloseMin">) {
   if (o.windowOpenMin == null || o.windowCloseMin == null) return "—"
   let open = o.windowOpenMin
   let close = o.windowCloseMin
