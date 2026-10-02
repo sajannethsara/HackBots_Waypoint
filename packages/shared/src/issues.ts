@@ -161,6 +161,7 @@ export const createIssueSchema = z.object({
   tripId: z.string().optional(),
   stopId: z.string().optional(),
   orderId: z.string().optional(),
+  orderLineId: z.string().optional(),
   outletId: z.string().optional(),
   vehicleId: z.string().optional(),
 })

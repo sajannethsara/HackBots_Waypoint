@@ -10,3 +10,4 @@ coverage
 next-env.d.ts
 # competition material (not ours to publish)
 Challenge Booklet.pdf
+.next-prod

@@ -12,6 +12,7 @@
     "db:up": "docker compose up -d db",
     "db:migrate": "pnpm --filter @waypoint/db migrate:dev",
     "db:seed": "pnpm --filter @waypoint/db seed",
+    "driver:reset": "pnpm --filter @waypoint/db driver:reset",
     "db:reset": "pnpm --filter @waypoint/db reset",
     "db:studio": "pnpm --filter @waypoint/db studio",
     "plan:task2b": "pnpm --filter @waypoint/engine task2b",

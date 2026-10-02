@@ -342,6 +342,20 @@ export class ChatService {
   /** Things worth mentioning in this thread: relevant to the member, never "everything". */
   async mentionOptions(user: SessionUser, q: { conversationId?: string; q?: string; type?: string }): Promise<MentionOption[]> {
     const { member, issueId } = await this.mentionContext(user, q.conversationId)
+    return this.mentionOptionsFor(member, issueId, q)
+  }
+
+  /** Mentions inside an issue group chat: what the signed-in member may reference, plus the issue's own context. */
+  async mentionOptionsForIssue(user: SessionUser, issueId: string, q: { q?: string; type?: string }): Promise<MentionOption[]> {
+    return this.mentionOptionsFor(await this.member(user.sub), issueId, q)
+  }
+
+  /** Validate and canonicalise @mentions in an issue chat message. */
+  async resolveMentionsForIssue(user: SessionUser, issueId: string, raw: string) {
+    return this.resolveMentions(await this.member(user.sub), issueId, raw)
+  }
+
+  private async mentionOptionsFor(member: Member, issueId: string | null, q: { q?: string; type?: string }): Promise<MentionOption[]> {
     const scope = await this.scope(member, issueId)
     const term = q.q?.trim()
     const types = (q.type ? [q.type] : ["issue", "trip", "outlet", "vehicle", "order"]) as MentionType[]

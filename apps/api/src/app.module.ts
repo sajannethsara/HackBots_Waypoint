@@ -7,7 +7,9 @@ import { PrismaModule } from "./common/prisma.service"
 import { ChatModule } from "./modules/chat/chat.module"
 import { AuthModule } from "./modules/auth/auth.module"
 import { DashboardModule } from "./modules/dashboard/dashboard.module"
+import { DriverModule } from "./modules/driver/driver.module"
 import { HealthModule } from "./modules/health/health.module"
+import { IssueChatModule } from "./modules/issue-chat/issue-chat.module"
 import { IssuesModule } from "./modules/issues/issues.module"
 import { LiveModule } from "./modules/live/live.module"
 import { TripsModule } from "./modules/trips/trips.module"
@@ -34,8 +36,10 @@ import { ReferenceModule } from "./modules/reference/reference.module"
     PlanningModule,
     LiveModule,
     IssuesModule,
+    IssueChatModule,
     ChatModule,
     TripsModule,
+    DriverModule,
     VehiclesModule,
     OutletsModule,
   ],

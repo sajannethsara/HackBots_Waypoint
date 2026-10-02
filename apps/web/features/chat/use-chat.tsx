@@ -71,6 +71,10 @@ export function ChatProvider({ wsUrl, children }: { wsUrl?: string; children: Re
       refresh()
     })
     socket.on("read", refresh)
+    socket.on("issue-chat:message", () => {
+      qc.invalidateQueries({ queryKey: ["issue-chat"] })
+      window.dispatchEvent(new Event("wp:issue-chat"))
+    })
     return () => {
       socket.disconnect()
     }
@@ -201,11 +205,15 @@ export function useSendMessage(conversationId: string) {
   }
 }
 
-export function useMentionOptions(conversationId: string | null, q: string, enabled: boolean) {
+/** What can be @mentioned: in a direct conversation or inside an issue's group chat. */
+export type MentionScope = { conversationId: string } | { issueChatId: string }
+
+export function useMentionOptions(scope: MentionScope, q: string, enabled: boolean) {
+  const id = "issueChatId" in scope ? `issue:${scope.issueChatId}` : scope.conversationId
   return useQuery({
-    queryKey: chatKeys.mentions(conversationId ?? "", q),
-    queryFn: () => api<MentionOption[]>(`/chat/mentions${qs({ conversationId, q })}`),
-    enabled: enabled && !!conversationId,
+    queryKey: chatKeys.mentions(id, q),
+    queryFn: () => api<MentionOption[]>("issueChatId" in scope ? `/issue-chats/${scope.issueChatId}/mentions${qs({ q })}` : `/chat/mentions${qs({ conversationId: scope.conversationId, q })}`),
+    enabled: enabled && !!id,
     placeholderData: (prev) => prev,
     staleTime: 30_000,
   })

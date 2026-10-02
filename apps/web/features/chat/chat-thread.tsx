@@ -21,9 +21,12 @@ export function ChatThread({
   conversationId,
   onBack,
   reserveClose,
+  touch,
   className,
 }: {
   conversationId: string
+  /** Bigger targets for phones. */
+  touch?: boolean
   onBack?: () => void
   /** Leave room for a close button in the top-right corner (the side sheet has one). */
   reserveClose?: boolean
@@ -186,15 +189,29 @@ export function ChatThread({
         )}
       </div>
 
-      {conv && other && <Composer conversationId={conversationId} memberName={other.name} onSend={submit} autoFocus />}
+      {conv && other && (
+        <Composer
+          scope={{ conversationId }}
+          placeholder={`Message ${other.name}…`}
+          mentionHint={`You can mention issues, trips, outlets, vehicles and orders that involve ${other.name}.`}
+          onSend={submit}
+          autoFocus={!touch}
+          touch={touch}
+        />
+      )}
     </div>
   )
 }
 
-function MessageList({
+/**
+ * The message bubbles. `group` is the issue-chat look: everyone's messages are shown against their
+ * name and role, and "mine" means sent by me (not by my side of a two-party conversation).
+ */
+export function MessageList({
   messages,
   myRole,
   myId,
+  group,
   canLoadEarlier,
   loadingEarlier,
   onLoadEarlier,
@@ -204,15 +221,16 @@ function MessageList({
   messages: PendingMessage[]
   myRole: Role
   myId: string
-  canLoadEarlier: boolean
-  loadingEarlier: boolean
-  onLoadEarlier: () => void
-  onRetry: (m: PendingMessage) => void
-  onDiscard: (m: PendingMessage) => void
+  group?: boolean
+  canLoadEarlier?: boolean
+  loadingEarlier?: boolean
+  onLoadEarlier?: () => void
+  onRetry?: (m: PendingMessage) => void
+  onDiscard?: (m: PendingMessage) => void
 }) {
   return (
     <div className="grid gap-0.5">
-      {canLoadEarlier && (
+      {canLoadEarlier && onLoadEarlier && (
         <Button variant="ghost" size="xs" className="mx-auto mb-2" disabled={loadingEarlier} onClick={onLoadEarlier}>
           {loadingEarlier ? "Loading…" : "Load earlier messages"}
         </Button>
@@ -237,13 +255,14 @@ function MessageList({
             ) : (
               <Bubble
                 m={m}
-                mine={m.sender?.role === myRole}
+                mine={group ? m.senderId === myId : m.sender?.role === myRole}
+                group={group}
                 byMe={m.senderId === myId}
                 myRole={myRole}
                 first={newDay || !prev || prev.kind === "SYSTEM" || prev.senderId !== m.senderId || +new Date(m.createdAt) - +new Date(prev.createdAt) > GROUP_GAP_MS}
                 last={!next || next.kind === "SYSTEM" || next.senderId !== m.senderId || +new Date(next.createdAt) - +new Date(m.createdAt) > GROUP_GAP_MS || dayLabel(next.createdAt) !== dayLabel(m.createdAt)}
-                onRetry={() => onRetry(m)}
-                onDiscard={() => onDiscard(m)}
+                onRetry={() => onRetry?.(m)}
+                onDiscard={() => onDiscard?.(m)}
               />
             )}
           </div>
@@ -258,6 +277,7 @@ function Bubble({
   mine,
   byMe,
   myRole,
+  group,
   first,
   last,
   onRetry,
@@ -268,6 +288,7 @@ function Bubble({
   mine: boolean
   byMe: boolean
   myRole: Role
+  group?: boolean
   first: boolean
   last: boolean
   onRetry: () => void
@@ -277,7 +298,12 @@ function Bubble({
     <div className={cn("flex items-end gap-2", mine && "flex-row-reverse", first && "mt-2")}>
       <div className="w-8 shrink-0">{last && m.sender && !mine && <PersonAvatar name={m.sender.name} role={m.sender.role} size="sm" />}</div>
       <div className={cn("flex min-w-0 max-w-[82%] flex-col", mine ? "items-end" : "items-start")}>
-        {first && m.sender && (!mine || !byMe) && <span className="mb-0.5 px-1 text-[11px] text-muted-foreground">{m.sender.name}</span>}
+        {first && m.sender && (!mine || !byMe) && (
+          <span className="mb-0.5 flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
+            {m.sender.name}
+            {group && <RoleTag role={m.sender.role} />}
+          </span>
+        )}
         <div
           className={cn(
             "rounded-2xl px-3 py-1.5 text-sm leading-relaxed break-words whitespace-pre-wrap",

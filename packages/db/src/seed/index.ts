@@ -18,8 +18,8 @@ const db = new PrismaClient()
 async function wipe() {
   // Children before parents.
   const tables = [
-    "Message", "Conversation", "AuditLog", "Notification", "Receipt", "Issue", "DeliveryLine", "ProofOfDelivery", "MediaAsset",
-    "DeliveryEvent", "Stop", "FuelLedgerEntry", "Trip", "PlanDecision", "Plan", "OrderLine", "Order",
+    "Message", "Conversation", "AuditLog", "Notification", "Receipt", "IssueChatMessage", "IssueChatMember", "IssueChat", "Issue", "DeliveryLine", "ProofOfDelivery", "MediaAsset",
+    "DriverLocation", "DeliveryEvent", "Stop", "FuelLedgerEntry", "Trip", "PlanDecision", "Plan", "OrderLine", "Order",
     "DemandForecast", "DemandWeekly", "User", "RoadCondition", "TrafficSpeed", "CalendarDay",
     "ServiceAllowance", "Vehicle", "Outlet", "District", "Depot", "AppSetting",
   ]

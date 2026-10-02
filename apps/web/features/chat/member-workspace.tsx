@@ -1,16 +1,19 @@
 "use client"
 
-import { Suspense } from "react"
+import { Suspense, useState } from "react"
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { useMe } from "@/hooks/use-session"
+import { IssueChatsInbox } from "@/features/issue-chat/issue-chats-inbox"
+import { cn } from "@/lib/utils"
 import { Inbox } from "./inbox"
 import { ChatProvider, useUnread } from "./use-chat"
 
 function Shell() {
   const { data: me } = useMe()
   const { data: unread } = useUnread()
+  const [view, setView] = useState<"messages" | "issues">("messages")
   if (!me) return null
   return (
     <SidebarProvider>
@@ -19,12 +22,16 @@ function Shell() {
         <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/85 px-4 backdrop-blur">
           <SidebarTrigger />
           <Separator orientation="vertical" className="h-5" />
-          <span className="text-sm font-medium">Inbox</span>
+          <div className="flex gap-1">
+            {(["messages", "issues"] as const).map((v) => (
+              <button key={v} type="button" onClick={() => setView(v)} className={cn("h-8 rounded-lg px-3 text-sm font-medium", view === v ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted")}>
+                {v === "messages" ? "Dispatch messages" : "Issue chats"}
+              </button>
+            ))}
+          </div>
         </header>
         <div className="mx-auto h-[calc(100svh-3.5rem)] w-full max-w-5xl p-3 md:p-5">
-          <Suspense>
-            <Inbox />
-          </Suspense>
+          <Suspense>{view === "messages" ? <Inbox /> : <IssueChatsInbox />}</Suspense>
         </div>
       </SidebarInset>
     </SidebarProvider>

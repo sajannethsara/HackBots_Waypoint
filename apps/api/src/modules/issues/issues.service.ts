@@ -11,6 +11,7 @@ import {
 import type { SessionUser } from "../../common/auth"
 import { PrismaService } from "../../common/prisma.service"
 import { ChatService } from "../chat/chat.service"
+import { IssueChatService } from "../issue-chat/issue-chat.module"
 
 export const SYSTEM_EMAIL = "system@waypoint.lk"
 
@@ -44,6 +45,7 @@ export class IssuesService {
   constructor(
     private readonly db: PrismaService,
     private readonly chat: ChatService,
+    private readonly issueChat: IssueChatService,
   ) {}
 
   /** Issues that belong to a depot: via the trip's plan, the outlet or the vehicle. */
@@ -139,6 +141,7 @@ export class IssuesService {
         data: { ...input, ref, vehicleId: input.vehicleId ?? trip?.vehicleId, reportedById: user.sub },
       })
     })
+    void this.issueChat.ensure(issue.id).catch(() => undefined) // everyone the issue affects joins its group chat
     await this.db.auditLog.create({
       data: { actorId: user.sub, action: "ISSUE_REPORTED", entityType: "Issue", entityId: issue.id, after: { type: issue.type, severity: issue.severity } },
     })
@@ -153,6 +156,7 @@ export class IssuesService {
       this.db.auditLog.create({ data: { actorId: user.sub, action: "ISSUE_ACKNOWLEDGED", entityType: "Issue", entityId: id } }),
     ])
     void this.chat.postSystemForIssue(id, `${issue.ref} acknowledged by dispatch — someone is on it.`)
+    void this.issueChat.systemNote(id, `Dispatch acknowledged ${issue.ref}: someone is on it.`)
     return this.get(id)
   }
 
@@ -198,6 +202,7 @@ export class IssuesService {
       }),
     ])
     void this.chat.postSystemForIssue(id, `${issue.ref} resolved: ${input.resolution}`)
+    void this.issueChat.closeForResolution(id, user, input.resolution)
     return this.get(id)
   }
 

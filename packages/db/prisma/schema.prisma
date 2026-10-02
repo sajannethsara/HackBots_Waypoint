@@ -72,15 +72,15 @@ enum TempRequirement {
 }
 
 enum OrderStatus {
-  SUBMITTED   // confirmed before cutoff, waiting for planning
-  PLANNED     // on a published plan
-  DEFERRED    // moved to a later run
+  SUBMITTED // confirmed before cutoff, waiting for planning
+  PLANNED // on a published plan
+  DEFERRED // moved to a later run
   LOADED
   IN_TRANSIT
   DELIVERED
   PARTIAL
   REFUSED
-  RECEIVED    // store manager confirmed receipt
+  RECEIVED // store manager confirmed receipt
   CANCELLED
 }
 
@@ -93,7 +93,7 @@ enum PlanStatus {
 enum TripStatus {
   PLANNED
   LOADING
-  LOADED      // released by loader
+  LOADED // released by loader
   DEPARTED
   COMPLETED
   CANCELLED
@@ -202,7 +202,7 @@ enum FuelEntryKind {
 
 enum ConversationKind {
   DIRECT // dispatch desk <-> one person, no subject
-  ISSUE  // scoped to one issue
+  ISSUE // scoped to one issue
 }
 
 enum MessageKind {
@@ -218,68 +218,68 @@ enum ForecastSource {
 // ───────────────────────── Reference data (CSV) ─────────────────────────
 
 model Depot {
-  id        String     @id // "PELIYAGODA" | "KANDY"
-  name      String
-  lat       Float?     // map enrichment
-  lng       Float?
-  districts District[]
-  outlets   Outlet[]
-  vehicles  Vehicle[]
-  users     User[]
-  plans     Plan[]
-  orders    Order[]
-  demand    DemandWeekly[]
-  forecasts DemandForecast[]
+  id            String           @id // "PELIYAGODA" | "KANDY"
+  name          String
+  lat           Float? // map enrichment
+  lng           Float?
+  districts     District[]
+  outlets       Outlet[]
+  vehicles      Vehicle[]
+  users         User[]
+  plans         Plan[]
+  orders        Order[]
+  demand        DemandWeekly[]
+  forecasts     DemandForecast[]
   conversations Conversation[]
 }
 
 // district_travel.csv
 model District {
-  id                    String    @id // district name, e.g. "Colombo"
-  depotId               String
-  depot                 Depot     @relation(fields: [depotId], references: [id])
-  roadClass             RoadClass
-  freeFlowKmh           Float
-  depotToDistrictKm     Float
-  depotToDistrictMin    Float     // depot_to_district_freeflow_min
-  interStopKm           Float
-  interStopMin          Float     // inter_stop_freeflow_min
-  centroidLat           Float?    // our enrichment for the map, documented
-  centroidLng           Float?
-  outlets               Outlet[]
-  trips                 Trip[]
-  trafficSpeeds         TrafficSpeed[]
-  roadConditions        RoadCondition[]
+  id                 String          @id // district name, e.g. "Colombo"
+  depotId            String
+  depot              Depot           @relation(fields: [depotId], references: [id])
+  roadClass          RoadClass
+  freeFlowKmh        Float
+  depotToDistrictKm  Float
+  depotToDistrictMin Float // depot_to_district_freeflow_min
+  interStopKm        Float
+  interStopMin       Float // inter_stop_freeflow_min
+  centroidLat        Float? // our enrichment for the map, documented
+  centroidLng        Float?
+  outlets            Outlet[]
+  trips              Trip[]
+  trafficSpeeds      TrafficSpeed[]
+  roadConditions     RoadCondition[]
 }
 
 // outlets.csv
 model Outlet {
-  id                String            @id // "OUT001"
-  name              String
-  brand             Brand
-  districtId        String
-  district          District          @relation(fields: [districtId], references: [id])
-  depotId           String
-  depot             Depot             @relation(fields: [depotId], references: [id])
-  dockType          DockType
-  parkingConstraint ParkingConstraint
+  id                 String            @id // "OUT001"
+  name               String
+  brand              Brand
+  districtId         String
+  district           District          @relation(fields: [districtId], references: [id])
+  depotId            String
+  depot              Depot             @relation(fields: [depotId], references: [id])
+  dockType           DockType
+  parkingConstraint  ParkingConstraint
   mallWindowOpenMin  Int?
   mallWindowCloseMin Int?
-  windowOpenMin     Int
-  windowCloseMin    Int
-  lastDeliveredOn   DateTime?         @db.Date // drives "days since last served"
-  lat               Float?            // map enrichment: deterministic point near the district centre
-  lng               Float?
-  managers          User[]
-  orders            Order[]
-  issues            Issue[]
+  windowOpenMin      Int
+  windowCloseMin     Int
+  lastDeliveredOn    DateTime?         @db.Date // drives "days since last served"
+  lat                Float? // map enrichment: deterministic point near the district centre
+  lng                Float?
+  managers           User[]
+  orders             Order[]
+  issues             Issue[]
 
   @@index([depotId, brand, districtId])
 }
 
 // vehicles.csv
 model Vehicle {
-  id               String        @id // "VEH001"
+  id               String            @id // "VEH001"
   type             VehicleType
   temp             VehicleTemp
   weightCapKg      Float
@@ -288,9 +288,9 @@ model Vehicle {
   kmPerL           Float
   weeklyFuelQuotaL Float
   depotId          String
-  depot            Depot         @relation(fields: [depotId], references: [id])
-  status           VehicleStatus @default(AVAILABLE)
-  driver           User?         @relation("DriverVehicle")
+  depot            Depot             @relation(fields: [depotId], references: [id])
+  status           VehicleStatus     @default(AVAILABLE)
+  driver           User?             @relation("DriverVehicle")
   trips            Trip[]
   fuelEntries      FuelLedgerEntry[]
   issues           Issue[]
@@ -310,14 +310,14 @@ model ServiceAllowance {
 // calendar.csv
 model CalendarDay {
   date         DateTime @id @db.Date
-  dow          Int      // 0 = Monday
+  dow          Int // 0 = Monday
   dowName      String
   isWeekend    Boolean
   isoYear      Int
   isoWeek      Int
   isPayday     Boolean
   festival     String?
-  festivalRamp Float    // 0..1
+  festivalRamp Float // 0..1
   isHoliday    Boolean
   monsoon      Boolean
   isOperating  Boolean
@@ -331,7 +331,7 @@ model TrafficSpeed {
   district   District @relation(fields: [districtId], references: [id])
   hour       Int
   monsoon    Boolean
-  speedIndex Float    // 100 = free flow
+  speedIndex Float // 100 = free flow
 
   @@id([districtId, hour, monsoon])
 }
@@ -341,7 +341,7 @@ model RoadCondition {
   date            DateTime @db.Date
   districtId      String
   district        District @relation(fields: [districtId], references: [id])
-  disruptionIndex Float    // 100 = clear
+  disruptionIndex Float // 100 = clear
 
   @@id([date, districtId])
 }
@@ -355,75 +355,78 @@ model User {
   phone        String?
   passwordHash String
   role         Role
-  depotId      String?  // dispatcher / loader scope
+  depotId      String? // dispatcher / loader scope
   depot        Depot?   @relation(fields: [depotId], references: [id])
-  outletId     String?  // store manager scope
+  outletId     String? // store manager scope
   outlet       Outlet?  @relation(fields: [outletId], references: [id])
   vehicleId    String?  @unique // driver's assigned vehicle
   vehicle      Vehicle? @relation("DriverVehicle", fields: [vehicleId], references: [id])
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now()) @db.Timestamptz
 
-  ordersCreated     Order[]           @relation("OrderCreatedBy")
-  plansPublished    Plan[]            @relation("PlanPublishedBy")
-  decisionsMade     PlanDecision[]    @relation("DecisionOverriddenBy")
-  tripsLoaded       Trip[]            @relation("TripLoadedBy")
-  tripsDriven       Trip[]            @relation("TripDriver")
+  ordersCreated     Order[]            @relation("OrderCreatedBy")
+  plansPublished    Plan[]             @relation("PlanPublishedBy")
+  decisionsMade     PlanDecision[]     @relation("DecisionOverriddenBy")
+  tripsLoaded       Trip[]             @relation("TripLoadedBy")
+  tripsDriven       Trip[]             @relation("TripDriver")
   deliveryEvents    DeliveryEvent[]
-  issuesReported    Issue[]           @relation("IssueReportedBy")
-  issuesResolved    Issue[]           @relation("IssueResolvedBy")
+  locations         DriverLocation[]
+  issueChatMembers  IssueChatMember[]
+  issueChatMessages IssueChatMessage[]
+  issuesReported    Issue[]            @relation("IssueReportedBy")
+  issuesResolved    Issue[]            @relation("IssueResolvedBy")
   receipts          Receipt[]
   notifications     Notification[]
   auditLogs         AuditLog[]
-  conversations     Conversation[]    @relation("ConversationMember")
-  messagesSent      Message[]         @relation("MessageSender")
+  conversations     Conversation[]     @relation("ConversationMember")
+  messagesSent      Message[]          @relation("MessageSender")
 }
 
 // ──────────────────────────────── Orders ────────────────────────────────
 
 model Order {
-  id                   String          @id @default(cuid())
-  ref                  String          @unique // "ORD-000123"
-  clientRequestId      String?         @unique // idempotent submit
-  outletId             String
-  outlet               Outlet          @relation(fields: [outletId], references: [id])
-  brand                Brand           // denormalised from outlet for planning queries
-  depotId              String
-  depot                Depot           @relation(fields: [depotId], references: [id])
-  deliveryDate         DateTime        @db.Date // current target run
-  requestedDate        DateTime        @db.Date // date the store asked for (Task 2A rule)
-  temp                 TempRequirement
-  units                Int
-  weightKg             Float
-  volumeM3             Float
-  status               OrderStatus     @default(SUBMITTED)
-  deferCount           Int             @default(0)
-  notes                String?
-  submittedAt          DateTime        @default(now()) @db.Timestamptz
-  updatedAt            DateTime        @updatedAt @db.Timestamptz
-  createdById          String
-  createdBy            User            @relation("OrderCreatedBy", fields: [createdById], references: [id])
-  lines                OrderLine[]
-  decisions            PlanDecision[]
-  stops                Stop[]
-  receipt              Receipt?
-  issues               Issue[]
+  id              String          @id @default(cuid())
+  ref             String          @unique // "ORD-000123"
+  clientRequestId String?         @unique // idempotent submit
+  outletId        String
+  outlet          Outlet          @relation(fields: [outletId], references: [id])
+  brand           Brand // denormalised from outlet for planning queries
+  depotId         String
+  depot           Depot           @relation(fields: [depotId], references: [id])
+  deliveryDate    DateTime        @db.Date // current target run
+  requestedDate   DateTime        @db.Date // date the store asked for (Task 2A rule)
+  temp            TempRequirement
+  units           Int
+  weightKg        Float
+  volumeM3        Float
+  status          OrderStatus     @default(SUBMITTED)
+  deferCount      Int             @default(0)
+  notes           String?
+  submittedAt     DateTime        @default(now()) @db.Timestamptz
+  updatedAt       DateTime        @updatedAt @db.Timestamptz
+  createdById     String
+  createdBy       User            @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  lines           OrderLine[]
+  decisions       PlanDecision[]
+  stops           Stop[]
+  receipt         Receipt?
+  issues          Issue[]
 
   @@index([depotId, deliveryDate, status])
   @@index([outletId, deliveryDate])
 }
 
 model OrderLine {
-  id          String  @id @default(cuid())
-  orderId     String
-  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  description String
-  category    String  // DAIRY, MEAT, PRODUCE, DRY, GARMENT, APPLIANCE ...
-  quantity    Int
-  weightKg    Float
-  volumeM3    Float
+  id            String         @id @default(cuid())
+  orderId       String
+  order         Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  description   String
+  category      String // DAIRY, MEAT, PRODUCE, DRY, GARMENT, APPLIANCE ...
+  quantity      Int
+  weightKg      Float
+  volumeM3      Float
   deliveryLines DeliveryLine[]
-  issues      Issue[]
+  issues        Issue[]
 }
 
 // ─────────────────────────────── Planning ───────────────────────────────
@@ -436,7 +439,7 @@ model Plan {
   version       Int
   status        PlanStatus     @default(DRAFT)
   engineVersion String
-  summary       Json           // demand vs capacity, limiting resources, KPIs
+  summary       Json // demand vs capacity, limiting resources, KPIs
   generatedAt   DateTime       @default(now()) @db.Timestamptz
   publishedAt   DateTime?      @db.Timestamptz
   publishedById String?
@@ -450,59 +453,60 @@ model Plan {
 
 // One row per order per plan: the explainability record
 model PlanDecision {
-  id               String          @id @default(cuid())
-  planId           String
-  plan             Plan            @relation(fields: [planId], references: [id], onDelete: Cascade)
-  orderId          String
-  order            Order           @relation(fields: [orderId], references: [id])
-  decision         Decision
-  source           DecisionSource  @default(ENGINE)
-  priorityScore    Float
-  scoreBreakdown   Json            // { deferredYesterday: 40, chilled: 20, festivalRamp: 8, ... }
-  reason           DeferralReason?
-  explanation      String?         // "No reefer left for Colombo after 6 chilled orders"
-  consecutiveDefers Int            @default(0)
-  note             String?
-  overriddenById   String?
-  overriddenBy     User?           @relation("DecisionOverriddenBy", fields: [overriddenById], references: [id])
-  createdAt        DateTime        @default(now()) @db.Timestamptz
+  id                String          @id @default(cuid())
+  planId            String
+  plan              Plan            @relation(fields: [planId], references: [id], onDelete: Cascade)
+  orderId           String
+  order             Order           @relation(fields: [orderId], references: [id])
+  decision          Decision
+  source            DecisionSource  @default(ENGINE)
+  priorityScore     Float
+  scoreBreakdown    Json // { deferredYesterday: 40, chilled: 20, festivalRamp: 8, ... }
+  reason            DeferralReason?
+  explanation       String? // "No reefer left for Colombo after 6 chilled orders"
+  consecutiveDefers Int             @default(0)
+  note              String?
+  overriddenById    String?
+  overriddenBy      User?           @relation("DecisionOverriddenBy", fields: [overriddenById], references: [id])
+  createdAt         DateTime        @default(now()) @db.Timestamptz
 
   @@unique([planId, orderId])
   @@index([orderId])
 }
 
 model Trip {
-  id               String     @id @default(cuid())
-  ref              String     // "TRIP-019", unique within plan
-  planId           String
-  plan             Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
-  vehicleId        String
-  vehicle          Vehicle    @relation(fields: [vehicleId], references: [id])
-  tripNo           Int        // 1 or 2
-  brand            Brand
-  districtId       String
-  district         District   @relation(fields: [districtId], references: [id])
-  status           TripStatus @default(PLANNED)
-  plannedDepartMin Int
-  plannedDurationMin Float    // outbound + inter-stop + handling (Task 2B formula)
-  plannedKm        Float
-  plannedFuelL     Float
-  loadWeightKg     Float
-  loadVolumeM3     Float
-  loadedAt         DateTime?  @db.Timestamptz
-  loadedById       String?
-  loadedBy         User?      @relation("TripLoadedBy", fields: [loadedById], references: [id])
-  driverId         String?
+  id                 String            @id @default(cuid())
+  ref                String // "TRIP-019", unique within plan
+  planId             String
+  plan               Plan              @relation(fields: [planId], references: [id], onDelete: Cascade)
+  vehicleId          String
+  vehicle            Vehicle           @relation(fields: [vehicleId], references: [id])
+  tripNo             Int // 1 or 2
+  brand              Brand
+  districtId         String
+  district           District          @relation(fields: [districtId], references: [id])
+  status             TripStatus        @default(PLANNED)
+  plannedDepartMin   Int
+  plannedDurationMin Float // outbound + inter-stop + handling (Task 2B formula)
+  plannedKm          Float
+  plannedFuelL       Float
+  loadWeightKg       Float
+  loadVolumeM3       Float
+  loadedAt           DateTime?         @db.Timestamptz
+  loadedById         String?
+  loadedBy           User?             @relation("TripLoadedBy", fields: [loadedById], references: [id])
+  driverId           String?
   /// Road geometry from Google Routes: { source, legs: [[lat,lng]...][], km, min, computedAt }
-  route            Json?
-  driver           User?      @relation("TripDriver", fields: [driverId], references: [id])
-  updatedAt        DateTime   @updatedAt @db.Timestamptz
-  departedAt       DateTime?  @db.Timestamptz
-  completedAt      DateTime?  @db.Timestamptz
-  stops            Stop[]
-  deliveryEvents   DeliveryEvent[]
-  fuelEntries      FuelLedgerEntry[]
-  issues           Issue[]
+  route              Json?
+  driver             User?             @relation("TripDriver", fields: [driverId], references: [id])
+  updatedAt          DateTime          @updatedAt @db.Timestamptz
+  departedAt         DateTime?         @db.Timestamptz
+  completedAt        DateTime?         @db.Timestamptz
+  stops              Stop[]
+  deliveryEvents     DeliveryEvent[]
+  locations          DriverLocation[]
+  fuelEntries        FuelLedgerEntry[]
+  issues             Issue[]
 
   @@unique([planId, vehicleId, tripNo])
   @@unique([planId, ref])
@@ -510,23 +514,23 @@ model Trip {
 
 // One stop per order (brief: each dispatched order is its own stop)
 model Stop {
-  id                String      @id @default(cuid())
+  id                String           @id @default(cuid())
   tripId            String
-  trip              Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  trip              Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
   orderId           String
-  order             Order       @relation(fields: [orderId], references: [id])
-  seq               Int         // delivery order; loader loads in reverse
+  order             Order            @relation(fields: [orderId], references: [id])
+  seq               Int // delivery order; loader loads in reverse
   plannedArrivalMin Int
-  plannedWaitMin    Float       @default(0) // early arrival waits for window
+  plannedWaitMin    Float            @default(0) // early arrival waits for window
   plannedServiceMin Float
-  etaMin            Int?        // live estimate, refreshed from driver events
-  etaUpdatedAt      DateTime?   @db.Timestamptz
-  atRisk            Boolean     @default(false)
+  etaMin            Int? // live estimate, refreshed from driver events
+  etaUpdatedAt      DateTime?        @db.Timestamptz
+  atRisk            Boolean          @default(false)
   riskReason        String?
-  status            StopStatus  @default(PENDING)
-  loadStatus        LoadStatus  @default(PENDING)
-  arrivedAt         DateTime?   @db.Timestamptz
-  completedAt       DateTime?   @db.Timestamptz
+  status            StopStatus       @default(PENDING)
+  loadStatus        LoadStatus       @default(PENDING)
+  arrivedAt         DateTime?        @db.Timestamptz
+  completedAt       DateTime?        @db.Timestamptz
   proof             ProofOfDelivery?
   events            DeliveryEvent[]
   issues            Issue[]
@@ -539,18 +543,18 @@ model Stop {
 
 // Append-only. `id` is generated on the driver's device, so replays are no-ops.
 model DeliveryEvent {
-  id          String            @id // client UUID
-  tripId      String
-  trip        Trip              @relation(fields: [tripId], references: [id])
-  stopId      String?
-  stop        Stop?             @relation(fields: [stopId], references: [id])
-  driverId    String
-  driver      User              @relation(fields: [driverId], references: [id])
-  type        DeliveryEventType
-  occurredAt  DateTime          @db.Timestamptz // device clock
-  receivedAt  DateTime          @default(now()) @db.Timestamptz // server clock
-  deviceId    String?
-  payload     Json?
+  id         String            @id // client UUID
+  tripId     String
+  trip       Trip              @relation(fields: [tripId], references: [id])
+  stopId     String?
+  stop       Stop?             @relation(fields: [stopId], references: [id])
+  driverId   String
+  driver     User              @relation(fields: [driverId], references: [id])
+  type       DeliveryEventType
+  occurredAt DateTime          @db.Timestamptz // device clock
+  receivedAt DateTime          @default(now()) @db.Timestamptz // server clock
+  deviceId   String?
+  payload    Json?
 
   @@index([tripId, occurredAt])
 }
@@ -585,7 +589,7 @@ model MediaAsset {
   kind         MediaKind
   mimeType     String
   sizeBytes    Int
-  data         Bytes            // compressed on device; small enough for Postgres
+  data         Bytes // compressed on device; small enough for Postgres
   createdAt    DateTime         @default(now()) @db.Timestamptz
   podSignature ProofOfDelivery? @relation("PodSignature")
   podPhoto     ProofOfDelivery? @relation("PodPhoto")
@@ -638,6 +642,7 @@ model Issue {
   createdAt    DateTime      @default(now()) @db.Timestamptz
   updatedAt    DateTime      @updatedAt @db.Timestamptz
   resolvedAt   DateTime?     @db.Timestamptz
+  chat         IssueChat?
 
   conversations Conversation[]
 
@@ -700,7 +705,7 @@ model Notification {
   id        String    @id @default(cuid())
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String    // ORDER_CONFIRMED, ORDER_DEFERRED, ETA_UPDATED, SHORTFALL ...
+  type      String // ORDER_CONFIRMED, ORDER_DEFERRED, ETA_UPDATED, SHORTFALL ...
   title     String
   body      String
   link      String?
@@ -714,7 +719,7 @@ model AuditLog {
   id         String   @id @default(cuid())
   actorId    String?
   actor      User?    @relation(fields: [actorId], references: [id])
-  action     String   // PLAN_PUBLISHED, ORDER_DEFERRED, DECISION_OVERRIDDEN ...
+  action     String // PLAN_PUBLISHED, ORDER_DEFERRED, DECISION_OVERRIDDEN ...
   entityType String
   entityId   String
   before     Json?
@@ -761,13 +766,82 @@ model Message {
   id             String       @id @default(cuid())
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  senderId       String?      // null for SYSTEM
+  senderId       String? // null for SYSTEM
   sender         User?        @relation("MessageSender", fields: [senderId], references: [id])
   kind           MessageKind  @default(TEXT)
-  body           String       // plain text with @[type:id|label] mention tokens
+  body           String // plain text with @[type:id|label] mention tokens
   mentions       Json         @default("[]") // resolved [{ type, id, label }]
   clientId       String?      @unique // idempotent resend from flaky connections
   createdAt      DateTime     @default(now()) @db.Timestamptz
 
   @@index([conversationId, createdAt])
+}
+
+// ─────────────────────────── Driver tracking ───────────────────────────
+
+// GPS fix from the driver's phone. `id` is a client UUID so offline batches replay safely.
+// Sampled every few minutes while a trip is running (web apps cannot track in the background).
+model DriverLocation {
+  id         String   @id // client UUID
+  driverId   String
+  driver     User     @relation(fields: [driverId], references: [id])
+  tripId     String?
+  trip       Trip?    @relation(fields: [tripId], references: [id])
+  lat        Float
+  lng        Float
+  accuracyM  Float?
+  speedKmh   Float?
+  heading    Float?
+  simulated  Boolean  @default(false) // demo mode
+  capturedAt DateTime @db.Timestamptz // device clock
+  receivedAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([tripId, capturedAt])
+  @@index([driverId, capturedAt])
+}
+
+// ─────────────────────────── Issue group chat ───────────────────────────
+
+// One group chat per issue. Members are the people the issue affects (driver, loader, store
+// manager). The dispatcher watches, changes the issue status and closes the chat; they do not post.
+model IssueChat {
+  id            String             @id @default(cuid())
+  issueId       String             @unique
+  issue         Issue              @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  depotId       String
+  closedAt      DateTime?          @db.Timestamptz
+  closedById    String?
+  lastMessageAt DateTime?          @db.Timestamptz
+  createdAt     DateTime           @default(now()) @db.Timestamptz
+  members       IssueChatMember[]
+  messages      IssueChatMessage[]
+
+  @@index([depotId, lastMessageAt])
+}
+
+model IssueChatMember {
+  chatId   String
+  chat     IssueChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  relation String // "Driver on TRIP-013", "Store manager · Colombo 003"
+  unread   Int       @default(0)
+  joinedAt DateTime  @default(now()) @db.Timestamptz
+
+  @@id([chatId, userId])
+  @@index([userId])
+}
+
+model IssueChatMessage {
+  id        String      @id @default(cuid())
+  chatId    String
+  chat      IssueChat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  senderId  String? // null for SYSTEM
+  sender    User?       @relation(fields: [senderId], references: [id])
+  kind      MessageKind @default(TEXT)
+  body      String
+  clientId  String?     @unique // idempotent resend from flaky connections
+  createdAt DateTime    @default(now()) @db.Timestamptz
+
+  @@index([chatId, createdAt])
 }

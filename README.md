@@ -117,7 +117,27 @@ Chilled demand (181.6 m³) exceeds the available reefer capacity (172.4 m³ acro
    - add a note and resolve. The history records who did what.
    Restarting the live clock withdraws the auto-raised issues.
 
-### Loader, Driver, Store manager
+### Driver (phone app)
+The driver workspace is an installable, offline-first mobile app (PWA) at `/driver`. Judge it on a phone-sized screen: open the site on a phone, or use Chrome DevTools device mode (390 × 844).
+
+1. Sign in as the **Driver** demo account. The first run shows **Getting ready**: the phone saves the app code, today's trip and the map along the route, so everything keeps working with no signal. After that the app opens straight away.
+2. **Trip** tab: TRIP-013 with its stops. The trip is **claimed at the depot**: tap **To the depot** for turn-by-turn navigation inside the app. When the phone is within 300 m of the depot, **Claim trip** unlocks (if GPS is unavailable the driver can confirm manually). From then on the phone shares its GPS position with dispatch every `GPS_PING_SECONDS` (default 240 s = 4 min) and at every stop action.
+3. **Map** tab: interactive Mapbox map with the road route, numbered stops, the next stop highlighted and your own position. **Navigate** (on the next-stop card or a stop) starts in-app turn-by-turn guidance: a tilted follow camera, a large next-maneuver banner, remaining time and distance, voice prompts (mutable) and automatic re-routing. With no signal it falls back to the road leg saved with the trip (with its steps), then to a straight heading. Without a Mapbox token (or without tiles offline) a route diagram is shown instead.
+4. Tap **I've arrived** (offered automatically when you are within `ARRIVE_RADIUS_M` of the stop) → **Record delivery** → *Delivered in full*, *Partly delivered* (set quantities and a reason) or *Could not deliver* (reason, optional photo). Delivered and partial stops need the receiver's name and a signature; a photo is optional.
+5. **Go offline** (DevTools → Network → Offline, or airplane mode) and keep working: deliver the next stop, report a problem. The banner says what is happening, **Me → Sync** lists every queued record, and everything uploads on reconnect with its original timestamp. Nothing is lost or doubled if the connection drops mid-upload.
+6. **Issues** tab: every issue on the trip, whoever raised it (dispatch, loader, store manager, the driver, live monitoring), with who added it and when. **Report a problem** (breakdown, outlet closed, damaged goods…) adds one, with an optional photo, even offline.
+   - **Issue chat.** Every issue has one group chat for everyone it affects (driver, loader, store manager). Messages from the driver queue offline like everything else. Drivers talk only in the issue chat or to the dispatch desk, never to individuals.
+   - **Dispatcher.** The issue page shows the chat read-only, with the Resolve panel for status changes and **Close chat / Reopen chat**. Dispatch does not post in issue chats.
+   - **Loaders and store managers** see the same chats under *Issue chats* in their workspace.
+7. When every stop is done tap **Complete trip**. The store manager's notifications and the dispatcher's **Live operations** reflect the delivery. TRIP-013 there shows "Driver app · GPS fix N min ago" and follows the real position and stop statuses instead of the replay.
+
+**Demo mode.** Set `DEMO_MODE=true` in `.env` (and restart the API) to make the phone simulate GPS along the road route (pings every `DEMO_PING_SECONDS`), so the whole flow can be shown from a laptop without driving. The Trip and Me screens show a *Demo* badge. With `DEMO_MODE=false` the phone uses real GPS.
+
+**Repeating the walkthrough.** `pnpm driver:reset` puts the demo day back to "nothing driven yet" (trips and stops planned/pending; driver events, proofs, GPS pings and driver-reported issues removed).
+
+**Testing notes.** Service workers and GPS need HTTPS or `localhost`. Offline reload works fully in a production build (`pnpm --filter @waypoint/web build && pnpm --filter @waypoint/web start`); the dev server is not reliable for offline testing because its code chunks change constantly. Installing to the home screen: Chrome/Edge show **Install** (also on the Me tab); on iOS use Share → Add to Home Screen. Web apps cannot track in the background, so location is shared while the app is open; the screen is kept awake during a trip.
+
+### Loader, Store manager
 _In progress. The steps will be added here as each flow lands._
 
 ---
@@ -127,7 +147,7 @@ _In progress. The steps will be added here as each flow lands._
 - **Visual system:** the flows and information architecture follow the Figma design. The visuals were rebuilt as a compact shadcn/ui system (Base UI primitives, green preset) for consistency across roles.
 - **Command Center map → Capacity pressure:** demand vs capacity for reefers, vans, fleet volume and vehicles. On a planning day this tells the dispatcher more than a static map.
 - **Live map:** Google Maps with the Waypoint light/dark styles when `GOOGLE_MAPS_API_KEY` is set. Without a key, a schematic network map shows the same data, so the demo never depends on a third-party key.
-- **Live data source:** until the driver app is in use, positions come from a replay of the published plan. The replay clock can be played, paused and sped up. Driver events will replace the simulated times.
+- **Live data source:** trips nobody has started follow a replay of the published plan (the clock can be played, paused and sped up). Once a driver starts a trip in the driver app, that trip follows what the driver reports: their GPS position and the stops they have completed.
 - **Planning mode:** the "AI assisted / rule based / manual" choice became a single deterministic engine plus assisted manual edits (assign/defer with live validation). Results are reproducible and explainable.
 
 ---
@@ -138,6 +158,8 @@ See [.env.example](.env.example). Key variables:
 - `DATABASE_URL`, `JWT_SECRET`
 - `API_URL`: where the web proxy forwards requests
 - `DATA_DIR`: CSV location for the seed
+- `DEMO_MODE`, `DEMO_PING_SECONDS`: driver app demo mode (simulated GPS) and its ping interval
+- `GPS_PING_SECONDS` (240), `ARRIVE_RADIUS_M` (150): real-GPS reporting interval and the arrival geofence
 - `WEB_PORT`, `DB_PORT`
 - `GOOGLE_MAPS_API_KEY`: optional; enables the street map
 - `PUBLIC_WS_URL`: optional; the live WebSocket URL when the API isn't on the same host at port 4000

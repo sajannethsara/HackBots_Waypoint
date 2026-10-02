@@ -66,5 +66,5 @@ export class ChatController {
   }
 }
 
-@Module({ controllers: [ChatController], providers: [ChatService, ChatGateway], exports: [ChatService] })
+@Module({ controllers: [ChatController], providers: [ChatService, ChatGateway], exports: [ChatService, ChatGateway] })
 export class ChatModule {}

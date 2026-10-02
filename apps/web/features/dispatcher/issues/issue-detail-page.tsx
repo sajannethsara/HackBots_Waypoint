@@ -1,28 +1,25 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
-import { ArrowLeft, Bell, Check, CheckCircle2, Eye, Phone, Route, Store, Truck, User } from "lucide-react"
+import { ArrowLeft, Phone, Route, Store, Truck, User } from "lucide-react"
 import { ISSUE_STAGE_LABEL, ISSUE_TYPE_META, ROLE_LABEL, type Role } from "@waypoint/shared"
-import { BrandBadge, TagBadge, TempIcon, TONE } from "@/components/shared/badges"
+import { BrandBadge, TagBadge, TempIcon } from "@/components/shared/badges"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Spinner } from "@/components/ui/spinner"
-import { Textarea } from "@/components/ui/textarea"
 import { fmtDate, fmtDateTime, fmtNum, minToHHMM, timeAgo } from "@/lib/format"
 import type { IssueDetail } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { IssueContacts } from "@/features/chat/chat-sheet"
-import { useAcknowledgeIssue, useIssue, useResolveIssue, useTripDetail } from "../queries"
+import { useIssue, useTripDetail } from "../queries"
 import { TripMap, plannedAsLive } from "../trips/detail/trip-map"
 import { AutoBadge, IssueStatusBadge, SeverityBadge, StageBadge } from "./issue-badges"
+import { IssueWorkspace } from "./issue-workspace"
 
 const HISTORY_LABEL: Record<string, string> = {
   ISSUE_REPORTED: "Reported",
   ISSUE_ACKNOWLEDGED: "Acknowledged",
   ISSUE_RESOLVED: "Resolved",
+  ISSUE_ACTION: "Decision",
 }
 
 export function IssueDetailPage({ id, mapboxToken }: { id: string; mapboxToken?: string }) {
@@ -109,6 +106,7 @@ export function IssueDetailPage({ id, mapboxToken }: { id: string; mapboxToken?:
                     </p>
                     <p className="text-xs text-muted-foreground">{fmtDateTime(h.createdAt)}</p>
                     {h.action === "ISSUE_RESOLVED" && issue.resolution && <p className="mt-1 text-xs">{issue.resolution}</p>}
+                    {h.action === "ISSUE_ACTION" && typeof h.after?.summary === "string" && <p className="mt-1 text-xs">{h.after.summary}</p>}
                   </li>
                 ))}
                 {!issue.history.length && (
@@ -125,96 +123,9 @@ export function IssueDetailPage({ id, mapboxToken }: { id: string; mapboxToken?:
           </Card>
         </div>
 
-        <ResolvePanel issue={issue} />
+        <IssueWorkspace issue={issue} />
       </div>
     </div>
-  )
-}
-
-function ResolvePanel({ issue }: { issue: IssueDetail }) {
-  const ack = useAcknowledgeIssue(issue.id)
-  const resolve = useResolveIssue(issue.id)
-  const [actions, setActions] = useState<string[]>([])
-  const [note, setNote] = useState("")
-
-  if (issue.status === "RESOLVED")
-    return (
-      <Card size="sm" className="h-fit">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CheckCircle2 className="size-4 text-emerald-600" /> Resolved
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-2 text-sm">
-          <p>{issue.resolution}</p>
-          <p className="text-xs text-muted-foreground">
-            {issue.resolvedBy?.name ?? "Dispatcher"} · {issue.resolvedAt ? fmtDateTime(issue.resolvedAt) : ""}
-          </p>
-          <IssueContacts issueId={issue.id} className="mt-2 border-t pt-3" />
-        </CardContent>
-      </Card>
-    )
-
-  const toggle = (id: string) => setActions((a) => (a.includes(id) ? a.filter((x) => x !== id) : [...a, id]))
-  const notifies = issue.playbook.filter((p) => actions.includes(p.id) && p.effect)
-
-  return (
-    <Card size="sm" className="h-fit xl:sticky xl:top-18">
-      <CardHeader>
-        <CardTitle>Resolve</CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-4 text-sm">
-        {issue.status === "OPEN" && (
-          <div className={cn("flex items-center gap-3 rounded-lg p-3 text-xs ring-1 ring-inset", TONE.amber)}>
-            <span className="flex-1">Let the reporter know someone is on it.</span>
-            <Button size="xs" variant="outline" disabled={ack.isPending} onClick={() => ack.mutate()}>
-              {ack.isPending ? <Spinner /> : <Eye data-icon="inline-start" />} Acknowledge
-            </Button>
-          </div>
-        )}
-
-        <IssueContacts issueId={issue.id} />
-
-        <div className="grid gap-2">
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Playbook · {ISSUE_TYPE_META[issue.type].label}</p>
-          {issue.playbook.map((p) => (
-            <label
-              key={p.id}
-              className={cn("flex cursor-pointer items-start gap-2.5 rounded-lg border p-2.5 transition-colors hover:bg-muted/50", actions.includes(p.id) && "border-primary bg-primary/5")}
-            >
-              <Checkbox checked={actions.includes(p.id)} onCheckedChange={() => toggle(p.id)} className="mt-0.5" />
-              <span className="grid">
-                <span className="flex items-center gap-1.5 text-sm font-medium">
-                  {p.label}
-                  {p.effect && <Bell className="size-3 text-muted-foreground" />}
-                </span>
-                <span className="text-xs text-muted-foreground">{p.hint}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-
-        <div className="grid gap-2">
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Resolution note</p>
-          <Textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value.slice(0, 1000))}
-            rows={4}
-            placeholder="What was decided and what happens next. This is what the store and driver will read."
-          />
-        </div>
-
-        {!!notifies.length && (
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Bell className="size-3" /> Will notify {notifies.map((n) => (n.effect === "NOTIFY_STORE" ? "the store manager" : "the driver")).join(" and ")}.
-          </p>
-        )}
-
-        <Button disabled={note.trim().length < 3 || resolve.isPending} onClick={() => resolve.mutate({ actions, resolution: note.trim() })}>
-          {resolve.isPending ? <Spinner /> : <Check data-icon="inline-start" />} Resolve issue
-        </Button>
-      </CardContent>
-    </Card>
   )
 }
 

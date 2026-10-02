@@ -1,6 +1,6 @@
 import { Injectable, Logger, Module } from "@nestjs/common"
 import { Prisma } from "@waypoint/db"
-import type { LiveRoute } from "@waypoint/shared"
+import type { DriverNavStep, LiveRoute } from "@waypoint/shared"
 import { PrismaService } from "../../common/prisma.service"
 
 type Pt = [number, number] // [lat, lng]
@@ -29,7 +29,14 @@ interface DirectionsResponse {
   routes?: {
     distance: number
     duration: number
-    legs: { steps: { geometry: { coordinates: [number, number][] } }[] }[]
+    legs: {
+      steps: {
+        geometry: { coordinates: [number, number][] }
+        distance: number
+        name: string
+        maneuver: { instruction: string; type: string; modifier?: string; location: [number, number] }
+      }[]
+    }[]
   }[]
 }
 
@@ -58,12 +65,17 @@ export class RoutingService {
   }
 
   private async run(tripIds: string[]) {
+    // Missing, computed by an earlier provider, or a Mapbox route saved before turn-by-turn steps existed.
+    const existing = await this.db.trip.findMany({ where: { id: { in: tripIds } }, select: { id: true, route: true } })
+    const stale = existing
+      .filter((t) => {
+        const r = t.route as { source?: string; steps?: unknown } | null
+        return !r || r.source === "google" || (r.source === "mapbox" && !r.steps)
+      })
+      .map((t) => t.id)
+    if (!stale.length) return
     const trips = await this.db.trip.findMany({
-      where: {
-        id: { in: tripIds },
-        // Missing, or computed by an earlier provider — recompute with Mapbox.
-        OR: [{ route: { equals: Prisma.DbNull } }, { route: { path: ["source"], equals: "google" } }],
-      },
+      where: { id: { in: stale } },
       include: {
         plan: { select: { depot: { select: { lat: true, lng: true } } } },
         stops: { orderBy: { seq: "asc" }, include: { order: { select: { outlet: { select: { lat: true, lng: true } } } } } },
@@ -111,6 +123,18 @@ export class RoutingService {
           const p = thin(line)
           return p.length >= 2 ? p : [pts[i], pts[i + 1]]
         }),
+        steps: r.legs.map((leg) =>
+          leg.steps.map(
+            (st): DriverNavStep => ({
+              at: [+st.maneuver.location[1].toFixed(5), +st.maneuver.location[0].toFixed(5)],
+              type: st.maneuver.type,
+              mod: st.maneuver.modifier ?? null,
+              text: st.maneuver.instruction,
+              name: st.name,
+              d: Math.round(st.distance),
+            }),
+          ),
+        ),
         km: Math.round(r.distance / 100) / 10,
         min: Math.round(r.duration / 60),
       }

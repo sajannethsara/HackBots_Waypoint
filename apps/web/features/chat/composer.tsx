@@ -8,7 +8,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { mentionIcon } from "./chat-parts"
-import { useMentionOptions } from "./use-chat"
+import { useMentionOptions, type MentionScope } from "./use-chat"
 
 /** "@" + letters before the caret opens the picker. */
 const TRIGGER = /(?:^|\s)@([^\s@]*)$/
@@ -18,15 +18,22 @@ const TRIGGER = /(?:^|\s)@([^\s@]*)$/
  * remembered and turned into @[trip:id|TRIP-019] tokens on send, which the server validates.
  */
 export function Composer({
-  conversationId,
-  memberName,
+  scope,
+  placeholder,
+  mentionHint,
   onSend,
   autoFocus,
+  touch,
 }: {
-  conversationId: string
-  memberName: string
+  /** Where mentions are looked up: a direct conversation or an issue's group chat. */
+  scope: MentionScope
+  placeholder: string
+  /** Shown when nothing matches, e.g. "…that involve Nimal". */
+  mentionHint: string
   onSend: (body: string) => void
   autoFocus?: boolean
+  /** Bigger targets for phones. */
+  touch?: boolean
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
   const [text, setText] = useState("")
@@ -34,7 +41,7 @@ export function Composer({
   const [menu, setMenu] = useState<{ start: number; query: string } | null>(null)
   const [active, setActive] = useState(0)
   const query = useDeferredValue(menu?.query ?? "")
-  const options = useMentionOptions(conversationId, query, !!menu)
+  const options = useMentionOptions(scope, query, !!menu)
   const list = options.data ?? []
 
   const detect = (value: string, caret: number) => {
@@ -90,7 +97,7 @@ export function Composer({
   const over = text.length > MESSAGE_MAX - 200
 
   return (
-    <div className="relative border-t bg-background p-3">
+    <div className={cn("relative border-t bg-background", touch ? "p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]" : "p-3")}>
       {menu && (
         <div role="listbox" aria-label="Mention" className="absolute right-3 bottom-full left-3 z-10 mb-1 max-h-64 overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-md">
           {list.length === 0 ? (
@@ -100,7 +107,7 @@ export function Composer({
                   <Spinner /> Searching…
                 </span>
               ) : (
-                `Nothing matches. You can mention issues, trips, outlets, vehicles and orders that involve ${memberName}.`
+                `Nothing matches. ${mentionHint}`
               )}
             </p>
           ) : (
@@ -138,8 +145,9 @@ export function Composer({
           autoFocus={autoFocus}
           rows={1}
           maxLength={MESSAGE_MAX}
-          placeholder={`Message ${memberName}…`}
-          className="max-h-32 min-h-9 resize-none py-1.5"
+          placeholder={placeholder}
+          enterKeyHint="send"
+          className={cn("max-h-32 resize-none", touch ? "min-h-11 py-2.5" : "min-h-9 py-1.5")}
           onChange={(e) => {
             setText(e.target.value)
             detect(e.target.value, e.target.selectionStart)
@@ -169,10 +177,10 @@ export function Composer({
             }
           }}
         />
-        <Button type="button" variant="ghost" size="icon" title="Mention an issue, trip, outlet, vehicle or order" aria-label="Mention" onClick={openPicker}>
+        <Button type="button" variant="ghost" size={touch ? "icon-lg" : "icon"} className={touch ? "size-11" : undefined} title="Mention an issue, trip, outlet, vehicle or order" aria-label="Mention" onClick={openPicker}>
           <AtSign />
         </Button>
-        <Button type="button" size="icon" disabled={!text.trim()} onClick={submit} aria-label="Send message" title="Send (Enter)">
+        <Button type="button" size={touch ? "icon-lg" : "icon"} className={touch ? "size-11" : undefined} disabled={!text.trim()} onClick={submit} aria-label="Send message" title="Send (Enter)">
           <SendHorizontal />
         </Button>
       </div>

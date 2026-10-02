@@ -50,6 +50,6 @@ export class LiveController {
   imports: [IssuesModule, RoutingModule],
   controllers: [LiveController],
   providers: [LiveService, LiveClockService, LiveGateway],
-  exports: [LiveService],
+  exports: [LiveService, LiveClockService],
 })
 export class LiveModule {}

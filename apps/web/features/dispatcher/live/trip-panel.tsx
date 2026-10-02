@@ -74,6 +74,12 @@ export function TripPanel({ trip, onClose }: { trip: LiveTrip; onClose: () => vo
             <p className="text-xs text-muted-foreground">
               {trip.stopsDone} / {trip.stops.length} outlets · {trip.locationLabel}
             </p>
+            {trip.reported && (
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className={cn("size-1.5 rounded-full", trip.reported.fixAgeMin != null && trip.reported.fixAgeMin <= 10 ? "bg-emerald-500" : "bg-amber-500")} />
+                Driver app{trip.reported.simulated ? " (demo GPS)" : ""} · {trip.reported.fixAgeMin == null ? "no GPS fix yet" : trip.reported.fixAgeMin < 1 ? "GPS fix just now" : `GPS fix ${trip.reported.fixAgeMin} min ago`}
+              </p>
+            )}
           </div>
 
           <ol className="grid gap-1.5">

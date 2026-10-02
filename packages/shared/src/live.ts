@@ -67,12 +67,16 @@ export interface LiveTrip {
   leg: number
   /** Distance fraction travelled along `leg` (0–1). */
   legProgress: number
+  /** Present when the driver app is driving this trip: stops and status come from the driver, not the replay. */
+  reported?: { lastFixAt: string | null; fixAgeMin: number | null; simulated: boolean }
 }
 
 /** Road geometry for one trip, one polyline per leg: depot → stop 1 → … → stop n → depot. */
 export interface LiveRoute {
   source: "mapbox" | "straight"
   legs: [number, number][][]
+  /** Turn-by-turn steps per leg (Mapbox routes only). */
+  steps?: import("./driver").DriverNavStep[][]
   km: number
   min: number
 }
@@ -93,7 +97,7 @@ export interface LiveSnapshot {
   date: string
   planId: string | null
   planVersion: number | null
-  source: "simulation"
+  source: "simulation" | "driver" | "mixed"
   generatedAt: string
   clock: LiveClock
   depot: { name: string; position: LatLng }

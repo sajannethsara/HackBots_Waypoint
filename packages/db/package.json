@@ -13,6 +13,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "seed": "tsx src/seed/index.ts",
     "seed:prod": "node dist/seed/index.js",
+    "driver:reset": "tsx src/reset-driver-demo.ts",
     "reset": "prisma migrate reset --force",
     "studio": "prisma studio"
   },

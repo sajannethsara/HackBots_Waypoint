@@ -35,7 +35,10 @@ function LoginForm() {
     try {
       const { user } = await api<{ user: { role: Role } }>("/auth/login", { method: "POST", json: { email: e, password: p } })
       const next = params.get("next")
-      router.replace(next && next.startsWith(HOME[user.role]) ? next : HOME[user.role])
+      const target = next && next.startsWith(HOME[user.role]) ? next : HOME[user.role]
+      // The driver app is an installable, offline-capable page: load it fresh so its service worker takes control.
+      if (user.role === "DRIVER") window.location.assign(target)
+      else router.replace(target)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not reach the server")
       setBusy(false)

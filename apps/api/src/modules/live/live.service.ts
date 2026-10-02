@@ -5,6 +5,7 @@ import { PrismaService } from "../../common/prisma.service"
 import { IssuesService, type SystemIssue } from "../issues/issues.service"
 import { RoutingService } from "../routing/routing.service"
 import { LiveClockService } from "./live-clock.service"
+import { overlayDriver, type DriverTripState } from "./driver-overlay"
 import { alertsAt, buildTimeline, tripAt, type SimTrip } from "./simulation"
 
 interface Loaded {
@@ -38,7 +39,8 @@ export class LiveService {
   async snapshot(depotId: string, date: string): Promise<LiveSnapshot> {
     const data = await this.load(depotId, date)
     const clock = this.clock.now()
-    const trips = data.trips.map(({ sim, timeline }) => tripAt(sim, timeline, clock.minute))
+    const driverState = await this.driverState(data.trips.map((t) => t.sim.id))
+    const trips = data.trips.map(({ sim, timeline }) => overlayDriver(tripAt(sim, timeline, clock.minute), driverState.get(sim.id)))
     const onRoad = trips.filter((t) => ["ON_ROUTE", "AT_OUTLET", "DELAYED", "RETURNING"].includes(t.status))
     await this.monitor(depotId, date, trips)
     const openIssues = await this.db.issue.count({ where: { status: { not: "RESOLVED" }, trip: { planId: data.planId ?? "" } } })
@@ -48,7 +50,7 @@ export class LiveService {
       date,
       planId: data.planId,
       planVersion: data.planVersion,
-      source: "simulation",
+      source: trips.some((t) => t.reported) ? "mixed" : "simulation",
       generatedAt: new Date().toISOString(),
       clock,
       depot: data.depot,
@@ -68,6 +70,29 @@ export class LiveService {
       trips,
       alerts: alertsAt(trips, clock.minute),
     }
+  }
+
+  /** What drivers have reported for these trips (started, stops done, latest GPS fix). Cached a few seconds. */
+  private driverCache: { key: string; at: number; value: Map<string, DriverTripState> } | null = null
+  private async driverState(tripIds: string[]): Promise<Map<string, DriverTripState>> {
+    const key = tripIds.join(",")
+    if (this.driverCache?.key === key && Date.now() - this.driverCache.at < 2_500) return this.driverCache.value
+    const [trips, fixes] = await Promise.all([
+      this.db.trip.findMany({
+        where: { id: { in: tripIds }, OR: [{ departedAt: { not: null } }, { status: { in: ["DEPARTED", "COMPLETED"] } }] },
+        select: { id: true, status: true, departedAt: true, stops: { select: { id: true, status: true, completedAt: true } } },
+      }),
+      this.db.driverLocation.findMany({ where: { tripId: { in: tripIds } }, orderBy: { capturedAt: "desc" }, distinct: ["tripId"] }),
+    ])
+    const fixBy = new Map(fixes.map((f) => [f.tripId, f]))
+    const value = new Map<string, DriverTripState>(
+      trips.map((t) => {
+        const f = fixBy.get(t.id)
+        return [t.id, { ...t, fix: f ? { lat: f.lat, lng: f.lng, heading: f.heading, capturedAt: f.capturedAt, simulated: f.simulated } : null }]
+      }),
+    )
+    this.driverCache = { key, at: Date.now(), value }
+    return value
   }
 
   /**

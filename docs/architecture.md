@@ -74,6 +74,33 @@ sequenceDiagram
 - **Positions come from a simulation for now.** `LiveService` replays the published plan, scaling travel by the district's `traffic_speed` (hour, monsoon) and `road_conditions` (date). This produces realistic delays, projected ETAs and window-miss alerts. Driver events (`DeliveryEvent`) will replace the simulated times once the driver app is in use.
 - **Maps.** Google Maps renders with the Waypoint light/dark style arrays. Markers are React elements in an `OverlayView`, so they share the design system, and routes are polylines (travelled part solid, remaining part dotted). Without an API key, an SVG schematic renders the same data.
 
-## Offline (driver / loader, next milestone)
+## Driver app (offline-first PWA)
 
-Driver and loader screens will be a PWA with an IndexedDB outbox. Events carry client-generated IDs (`DeliveryEvent.id`, `ProofOfDelivery.id`, `Issue.clientId`), so replaying after a reconnect has no side effects.
+```mermaid
+sequenceDiagram
+  participant P as Phone (/driver PWA)
+  participant SW as Service worker
+  participant DB as IndexedDB
+  participant API as API /driver/*
+  Note over P,SW: Sign-in → "Getting ready"
+  P->>SW: register, cache JS/CSS/fonts + app document
+  P->>API: GET /driver/bundle (today's trips, stops, road legs)
+  P->>DB: save bundle
+  P->>SW: warm map tiles along the route
+  Note over P,DB: On the road (any connectivity)
+  P->>P: apply action to the bundle + queue in outbox (client UUID)
+  P->>API: POST /driver/media (signature, photo)
+  P->>API: POST /driver/sync {events, GPS pings, issues}
+  API-->>P: accepted ids, rejected + reason, server clock
+  P->>DB: drop accepted records
+```
+
+- **Bundle, not pages.** The phone downloads one bundle with only what a driver acts on (stops, windows, access notes, items to hand over, road geometry). It excludes scores, weights, fuel quotas and other drivers' trips.
+- **Local first.** Every action is applied to the local bundle immediately and queued in an IndexedDB outbox. Records carry client UUIDs (`DeliveryEvent.id`, `ProofOfDelivery.id`, `MediaAsset.id`, `Issue.clientId`, `DriverLocation.id`), so the server treats a replay as a no-op. Events keep the device's `occurredAt`; the server stores `receivedAt` separately.
+- **Sync triggers.** Reconnect (`online`), after each action, on every GPS ping, every 20 s while anything is queued, and a 4-minute background refresh of the plan. Media upload first, because events cite them. The server asks the phone to retry (leaves the record queued) if a cited photo has not arrived yet.
+- **GPS.** A ping is queued every `GPS_PING_SECONDS` (240) while a trip runs, and at each stop action. Web apps cannot track in the background, so the screen is kept awake during a trip. In `DEMO_MODE` the phone simulates movement along the road route.
+- **Service worker.** The app document is network-first with a saved copy, `/_next/static` is cache-first, Mapbox style and tiles are cache-first. `/api` is never cached by the worker: the app owns its data. The worker's scope is `/driver`, so the dispatcher site is untouched.
+- **Navigation.** `RoutingService` stores Mapbox turn-by-turn steps with each trip's road legs, and the bundle carries them, so guidance works from the planned leg with no signal. Online, the phone asks Mapbox Directions for a route from its position to the target (depot or stop), snaps its GPS to the route every fix, re-routes after repeated off-route fixes and speaks the next maneuver. In demo mode the simulated phone drives whichever route is being shown.
+- **Claiming the trip.** `TRIP_DEPARTED` is only offered when the phone is within 300 m of the depot (or the driver confirms manually when GPS is unavailable); the event stores the fix.
+- **Issue group chat.** `IssueChat` (one per issue) has `IssueChatMember`s (the people the issue affects: reporter, driver, loader, store managers) and `IssueChatMessage`s. Created when an issue is raised (older and machine-raised issues get theirs on first look, without notifications). Members post, the dispatcher reads, changes the issue status (system notes appear in the chat) and closes or reopens it; a closed chat refuses posts. Realtime reaches members and the desk through the `/chat` socket (`issue-chat:message`). The driver app queues chat messages in its outbox with a client id, like events and issues.
+- **Live operations.** For a trip the driver has started, `LiveService` overlays the driver's reported stop statuses and latest `DriverLocation` on the replayed trip; other trips stay on the replay.

@@ -3,6 +3,8 @@ import { createIssueSchema, resolveIssueInputSchema, type CreateIssueInput, type
 import { CurrentUser, Roles, type SessionUser } from "../../common/auth"
 import { ZodPipe } from "../../common/zod.pipe"
 import { ChatModule } from "../chat/chat.module"
+import { IssueChatModule } from "../issue-chat/issue-chat.module"
+import { IssueActionsController, IssueActionsService } from "./issue-actions"
 import { IssuesService } from "./issues.service"
 
 @Controller("issues")
@@ -53,5 +55,5 @@ export class IssuesController {
   }
 }
 
-@Module({ imports: [ChatModule], controllers: [IssuesController], providers: [IssuesService], exports: [IssuesService] })
+@Module({ imports: [ChatModule, IssueChatModule], controllers: [IssuesController, IssueActionsController], providers: [IssuesService, IssueActionsService], exports: [IssuesService] })
 export class IssuesModule {}
