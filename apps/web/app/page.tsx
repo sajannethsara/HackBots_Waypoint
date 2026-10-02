@@ -1,6 +1,6 @@
-import Image from "next/image"
 import Link from "next/link"
 import { ArrowRight, Boxes, ClipboardCheck, MapPinned, Workflow } from "lucide-react"
+import { Wordmark } from "@/components/brand/logo"
 import { Button } from "@/components/ui/button"
 
 const ROLES = [
@@ -18,7 +18,7 @@ export default function Home() {
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(60rem_30rem_at_70%_-10%,color-mix(in_oklch,var(--primary)_14%,transparent),transparent)]"
       />
       <header className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
-        <Image src="/logo.png" alt="Waypoint — Unified delivery system" width={125} height={32} priority className="h-8 w-auto dark:brightness-150" />
+        <Wordmark className="h-8" />
         <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/login" />}>
           Sign in
         </Button>

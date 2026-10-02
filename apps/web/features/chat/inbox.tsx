@@ -44,7 +44,7 @@ export function Inbox() {
 
   return (
     <div className="grid h-full min-h-0 overflow-hidden rounded-xl border bg-card md:grid-cols-[340px_minmax(0,1fr)]">
-      <aside className={cn("flex min-h-0 flex-col border-r", selected && "hidden md:flex")}>
+      <aside className={cn("flex min-h-0 min-w-0 flex-col overflow-hidden border-r", selected && "hidden md:flex")}>
         <div className="grid gap-2.5 border-b p-3">
           <div className="flex items-center gap-2">
             <h1 className="flex-1 text-base font-semibold tracking-tight">Inbox</h1>
@@ -75,7 +75,7 @@ export function Inbox() {
           </Tabs>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
           {list.isLoading || !role ? (
             <div className="grid gap-2 p-3">
               {[0, 1, 2, 3].map((i) => (
@@ -143,9 +143,9 @@ function Row({ c, role, active, onClick }: { c: ConversationSummary; role: Role;
   const last = c.lastMessage
   const mine = last?.senderRole && (last.senderRole === "DISPATCHER") === (role === "DISPATCHER")
   return (
-    <button type="button" onClick={onClick} className={cn("flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", active && "bg-muted")}>
+    <button type="button" onClick={onClick} className={cn("flex w-full min-w-0 items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", active && "bg-muted")}>
       <PersonAvatar name={who.name} role={who.role} />
-      <span className="grid min-w-0 flex-1 gap-0.5">
+      <span className="grid min-w-0 flex-1 grid-cols-1 gap-0.5">
         <span className="flex items-center gap-2">
           <span className={cn("min-w-0 flex-1 truncate text-sm", c.unread ? "font-semibold" : "font-medium")}>{who.name}</span>
           {last && <span className="shrink-0 text-[11px] text-muted-foreground">{shortAgo(last.at)}</span>}

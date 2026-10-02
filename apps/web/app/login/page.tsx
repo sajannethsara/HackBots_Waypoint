@@ -1,10 +1,10 @@
 "use client"
 
-import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense, useState } from "react"
 import { Boxes, ClipboardCheck, MapPinned, Workflow } from "lucide-react"
 import type { Role } from "@waypoint/shared"
+import { Wordmark } from "@/components/brand/logo"
 import { HOME } from "@/components/layout/nav"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -90,7 +90,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-6 bg-muted/40 p-4">
-      <Image src="/logo.png" alt="Waypoint" width={140} height={36} priority className="h-9 w-auto dark:brightness-150" />
+      <Wordmark />
       <Suspense>
         <LoginForm />
       </Suspense>
