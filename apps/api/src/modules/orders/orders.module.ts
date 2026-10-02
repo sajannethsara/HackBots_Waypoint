@@ -67,21 +67,35 @@ export class OrdersService {
     }
   }
 
+  /** One order in full: items, every planning decision, the trip carrying it, receipt, issues and audit trail. */
   async get(id: string) {
     const order = await this.db.order.findUnique({
       where: { id },
       include: {
-        outlet: { include: { district: true } },
+        outlet: { include: { district: true, managers: { where: { isActive: true }, select: { id: true, name: true, phone: true } } } },
+        depot: { select: { id: true, name: true } },
         lines: true,
         createdBy: { select: { name: true } },
         decisions: { orderBy: { createdAt: "desc" }, include: { plan: { select: { version: true, status: true, date: true } }, overriddenBy: { select: { name: true } } } },
-        stops: { include: { trip: { select: { ref: true, vehicleId: true, status: true, plan: { select: { status: true } } } } } },
-        receipt: true,
-        issues: true,
+        stops: {
+          orderBy: { trip: { plan: { version: "desc" } } },
+          include: {
+            trip: { select: { id: true, ref: true, vehicleId: true, status: true, plannedDepartMin: true, driver: { select: { name: true, phone: true } }, plan: { select: { status: true, version: true, date: true, depotId: true } } } },
+            proof: { select: { recipientName: true, capturedAt: true } },
+          },
+        },
+        receipt: { include: { confirmedBy: { select: { name: true } } } },
+        issues: { orderBy: { createdAt: "desc" }, select: { id: true, ref: true, type: true, severity: true, status: true, createdAt: true } },
       },
     })
     if (!order) throw new NotFoundException("Order not found")
-    return order
+    const audit = await this.db.auditLog.findMany({
+      where: { OR: [{ entityType: "Order", entityId: id }, { entityType: "Issue", entityId: { in: order.issues.map((i) => i.id) } }] },
+      orderBy: { createdAt: "desc" },
+      take: 40,
+      include: { actor: { select: { name: true } } },
+    })
+    return { ...order, audit: audit.map((a) => ({ id: a.id, action: a.action, at: a.createdAt, actor: a.actor?.name ?? "System", entityType: a.entityType, after: a.after })) }
   }
 }
 

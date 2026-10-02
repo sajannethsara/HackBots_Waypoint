@@ -19,7 +19,6 @@ import type { OrderRow } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useOrders } from "../queries"
 import { outletWindow } from "../shared/window"
-import { OrderSheet } from "./order-sheet"
 
 const VIEWS = [
   { value: "all", label: "All orders" },
@@ -38,7 +37,6 @@ export function OrdersPage() {
   const [brand, setBrand] = useState<string>("")
   const [district, setDistrict] = useState<string>("")
   const [q, setQ] = useState("")
-  const [openId, setOpenId] = useState<string | null>(null)
 
   const { data: all } = useOrders({}) // unfiltered: totals + district list
   const { data, isLoading } = useOrders({ view, brand: brand || undefined, district: district || undefined, q: q || undefined })
@@ -127,11 +125,10 @@ export function OrdersPage() {
             ))}
           </div>
         ) : (
-          <OrdersTable rows={data.orders} onOpen={setOpenId} />
+          <OrdersTable rows={data.orders} onOpen={(id) => router.push(`/dispatcher/orders/${id}`)} />
         )}
       </Card>
 
-      <OrderSheet orderId={openId} onClose={() => setOpenId(null)} />
     </div>
   )
 }
@@ -189,7 +186,9 @@ function OrdersTable({ rows, onOpen }: { rows: OrderRow[]; onOpen: (id: string) 
           <TableRow key={o.id} className="cursor-pointer" onClick={() => onOpen(o.id)}>
             <TableCell className="pl-4 font-medium">
               <div className="flex items-center gap-1.5">
-                {o.ref}
+                <Link href={`/dispatcher/orders/${o.id}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
+                  {o.ref}
+                </Link>
                 {o.deferCount > 0 && (
                   <TagBadge tone="amber" title={`Deferred ${o.deferCount}× before`}>
                     ↻{o.deferCount}
@@ -197,7 +196,11 @@ function OrdersTable({ rows, onOpen }: { rows: OrderRow[]; onOpen: (id: string) 
                 )}
               </div>
             </TableCell>
-            <TableCell>{o.outlet.id}</TableCell>
+            <TableCell>
+              <Link href={`/dispatcher/outlets/${o.outlet.id}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
+                {o.outlet.id}
+              </Link>
+            </TableCell>
             <TableCell>
               <BrandBadge brand={o.brand as Brand} />
             </TableCell>
