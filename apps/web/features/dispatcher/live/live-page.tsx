@@ -17,6 +17,7 @@ import {
   Truck,
   Warehouse,
   Workflow,
+  X,
 } from "lucide-react"
 import { Cell, Label, Pie, PieChart } from "recharts"
 import type { LiveAlert, LiveSnapshot, LiveTrip } from "@waypoint/shared"
@@ -38,10 +39,10 @@ import { cn } from "@/lib/utils"
 import { ClockControl } from "./clock-control"
 import { STOP_COLOR, TRIP_COLOR, TRIP_TONE, isMoving, tripLabel } from "./status"
 import { TripPanel } from "./trip-panel"
-import { useLiveSnapshot } from "./use-live"
+import { useLiveRoutes, useLiveSnapshot } from "./use-live"
 
 const MapSkeleton = () => <Skeleton className="size-full rounded-none" />
-const GoogleLiveMap = dynamic(() => import("./map/google-live-map"), { ssr: false, loading: MapSkeleton })
+const MapboxLiveMap = dynamic(() => import("./map/mapbox-live-map"), { ssr: false, loading: MapSkeleton })
 const SchematicLiveMap = dynamic(() => import("./map/schematic-live-map"), { ssr: false, loading: MapSkeleton })
 
 const STATUS_FILTERS = [
@@ -53,7 +54,7 @@ const STATUS_FILTERS = [
   { value: "COMPLETED", label: "Completed" },
 ]
 
-export function LivePage({ mapsApiKey, wsUrl }: { mapsApiKey?: string; wsUrl?: string }) {
+export function LivePage({ mapboxToken, wsUrl }: { mapboxToken?: string; wsUrl?: string }) {
   const { data: snap, isLoading, link } = useLiveSnapshot(wsUrl)
   const { resolvedTheme } = useTheme()
   const theme = resolvedTheme === "dark" ? "dark" : "light"
@@ -74,6 +75,7 @@ export function LivePage({ mapsApiKey, wsUrl }: { mapsApiKey?: string; wsUrl?: s
     [snap, brand, status, q],
   )
   const selected = snap?.trips.find((t) => t.id === selectedId) ?? null
+  const { data: routes } = useLiveRoutes(snap?.planId, snap?.trips.length ?? 0)
 
   return (
     <div className="grid gap-4">
@@ -106,10 +108,10 @@ export function LivePage({ mapsApiKey, wsUrl }: { mapsApiKey?: string; wsUrl?: s
 
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
             <Card size="sm" className="relative h-[600px] gap-0 overflow-hidden p-0">
-              {mapsApiKey ? (
-                <GoogleLiveMap apiKey={mapsApiKey} snapshot={snap} trips={trips} selectedId={selectedId} onSelect={setSelectedId} theme={theme} />
+              {mapboxToken ? (
+                <MapboxLiveMap token={mapboxToken} snapshot={snap} trips={trips} routes={routes} selectedId={selectedId} onSelect={setSelectedId} theme={theme} rightInset={336} />
               ) : (
-                <SchematicLiveMap snapshot={snap} trips={trips} selectedId={selectedId} onSelect={setSelectedId} theme={theme} />
+                <SchematicLiveMap snapshot={snap} trips={trips} routes={routes} selectedId={selectedId} onSelect={setSelectedId} theme={theme} />
               )}
 
               {/* Toolbar */}
@@ -122,9 +124,19 @@ export function LivePage({ mapsApiKey, wsUrl }: { mapsApiKey?: string; wsUrl?: s
                   <MapSelect value={brand} onChange={setBrand} options={[{ value: "all", label: "All brands" }, { value: "FRESH", label: "Fresh" }, { value: "STYLE", label: "Style" }, { value: "TECH", label: "Tech" }]} />
                   <MapSelect value={status} onChange={setStatus} options={STATUS_FILTERS} />
                 </div>
+                {selected && (
+                  <button
+                    onClick={() => setSelectedId(null)}
+                    className="pointer-events-auto flex h-8 items-center gap-2 rounded-lg bg-foreground px-3 text-xs font-medium text-background shadow-md transition-opacity hover:opacity-90"
+                  >
+                    <span className="size-2 rounded-full" style={{ background: TRIP_COLOR[selected.status] }} />
+                    Showing {selected.ref} only
+                    <span className="opacity-60">· Show all</span>
+                  </button>
+                )}
               </div>
 
-              <Legend />
+              <Legend roadSource={routes ? (Object.values(routes).some((r) => r.source === "mapbox") ? "mapbox" : "straight") : "loading"} />
 
               {selected && (
                 <div className="absolute top-14 right-3 bottom-3 w-80 max-sm:inset-x-3 max-sm:w-auto">
@@ -180,7 +192,7 @@ function MapSelect({ value, onChange, options }: { value: string; onChange: (v: 
   )
 }
 
-function Legend() {
+function Legend({ roadSource }: { roadSource: "mapbox" | "straight" | "loading" }) {
   const items: [string, string, "ring" | "fill" | "vehicle"][] = [
     ["On route", TRIP_COLOR.ON_ROUTE, "vehicle"],
     ["Delayed", TRIP_COLOR.DELAYED, "vehicle"],
@@ -191,8 +203,30 @@ function Legend() {
     ["Outlet in progress", STOP_COLOR.IN_PROGRESS, "fill"],
     ["Outlet at risk", STOP_COLOR.LATE, "ring"],
   ]
+  const [open, setOpen] = useState(true)
+  if (!open)
+    return (
+      <button
+        type="button"
+        title="Show legend"
+        aria-label="Show legend"
+        onClick={() => setOpen(true)}
+        className="absolute bottom-3 left-3 z-50 hidden size-8 items-center justify-center rounded-lg border bg-background/95 shadow-sm backdrop-blur hover:bg-muted sm:flex"
+      >
+        <Info className="size-4" />
+      </button>
+    )
   return (
-    <div className="absolute bottom-3 left-3 hidden gap-1 rounded-lg border bg-background/95 p-2.5 text-[11px] shadow-sm backdrop-blur sm:grid">
+    <div className="absolute bottom-3 left-3 z-50 hidden gap-1 rounded-lg border bg-background/95 p-2.5 text-[11px] shadow-sm backdrop-blur sm:grid">
+      <button
+        type="button"
+        title="Collapse legend"
+        aria-label="Collapse legend"
+        onClick={() => setOpen(false)}
+        className="absolute top-1.5 right-1.5 flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-muted"
+      >
+        <X className="size-3.5" />
+      </button>
       {items.map(([label, color, kind]) => (
         <div key={label} className="flex items-center gap-2">
           <span
@@ -204,7 +238,11 @@ function Legend() {
       ))}
       <div className="mt-1 flex items-center gap-2 border-t pt-1.5 text-muted-foreground">
         <span className="h-0.5 w-4 rounded bg-foreground/70" /> travelled
-        <span className="h-0.5 w-4 border-t-2 border-dotted border-foreground/60" /> ahead
+        <span className="h-0.5 w-4 rounded bg-foreground/30" /> ahead
+      </div>
+      <div className="flex items-center gap-1.5 text-muted-foreground">
+        <span className={cn("size-1.5 rounded-full", roadSource === "mapbox" ? "bg-emerald-500" : "bg-amber-500")} />
+        {roadSource === "mapbox" ? "Road routes · Mapbox Directions" : roadSource === "loading" ? "Loading road routes…" : "Approximate (straight) routes"}
       </div>
     </div>
   )

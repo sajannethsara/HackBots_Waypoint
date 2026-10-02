@@ -104,6 +104,18 @@ Chilled demand (181.6 m³) exceeds the available reefer capacity (172.4 m³ acro
    - Delays come from that district's traffic and road-disruption data for the day.
    - Alerts flag vehicles running late and outlets that will miss their window.
    - Click a vehicle or a trip row to see its stop-by-stop progress. Filter by brand or status, or search for a vehicle, outlet or driver.
+7. Click **Open trip details** (or any row in **Trips**). The trip page shows:
+   - the route map and KPIs
+   - stops with planned vs actual times and window compliance
+   - the load manifest in loading order
+   - the operating-day trip log and the audit trail
+   - live alerts and the trip's issues.
+   Use **Report issue** to log a problem phoned in by the driver.
+8. Open **Issues**. Field reports are listed alongside issues that live monitoring raised automatically (marked **Auto**) when a vehicle ran 30+ min late or an outlet was projected to miss its window. Click **Resolve**, then:
+   - acknowledge the issue
+   - pick playbook actions; "Notify the store" and "Message the driver" send real notifications
+   - add a note and resolve. The history records who did what.
+   Restarting the live clock withdraws the auto-raised issues.
 
 ### Loader, Driver, Store manager
 _In progress. The steps will be added here as each flow lands._

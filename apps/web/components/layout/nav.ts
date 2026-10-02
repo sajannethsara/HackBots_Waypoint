@@ -1,13 +1,12 @@
 import {
   AlertTriangle,
   BarChart3,
-  Boxes,
   CircleAlert,
   ClipboardList,
   Gauge,
   LayoutDashboard,
   type LucideIcon,
-  MapPinned,
+  MessagesSquare,
   Radar,
   Route,
   Store,
@@ -20,7 +19,7 @@ export interface NavItem {
   title: string
   href: string
   icon: LucideIcon
-  badgeKey?: "exceptions" | "issues"
+  badgeKey?: "exceptions" | "issues" | "inbox"
   soon?: boolean
 }
 export interface NavGroup {
@@ -31,7 +30,13 @@ export interface NavGroup {
 /** Navigation per role. Mirrors the Designathon information architecture. */
 export const NAV: Record<Role, NavGroup[]> = {
   DISPATCHER: [
-    { label: "Today", items: [{ title: "Command Center", href: "/dispatcher", icon: LayoutDashboard }] },
+    {
+      label: "Today",
+      items: [
+        { title: "Command Center", href: "/dispatcher", icon: LayoutDashboard },
+        { title: "Inbox", href: "/dispatcher/inbox", icon: MessagesSquare, badgeKey: "inbox" },
+      ],
+    },
     {
       label: "Planning",
       items: [
@@ -45,7 +50,7 @@ export const NAV: Record<Role, NavGroup[]> = {
       items: [
         { title: "Live Operations", href: "/dispatcher/live", icon: Radar },
         { title: "Trips", href: "/dispatcher/trips", icon: Route },
-        { title: "Issues", href: "/dispatcher/issues", icon: CircleAlert, badgeKey: "issues", soon: true },
+        { title: "Issues", href: "/dispatcher/issues", icon: CircleAlert, badgeKey: "issues" },
       ],
     },
     {
@@ -63,9 +68,9 @@ export const NAV: Record<Role, NavGroup[]> = {
       ],
     },
   ],
-  LOADER: [{ label: "Dock", items: [{ title: "Loading", href: "/loader", icon: Boxes }] }],
-  DRIVER: [{ label: "Road", items: [{ title: "My run", href: "/driver", icon: MapPinned }] }],
-  STORE_MANAGER: [{ label: "Outlet", items: [{ title: "Orders", href: "/store", icon: Store }] }],
+  LOADER: [{ label: "Dock", items: [{ title: "Inbox", href: "/loader", icon: MessagesSquare, badgeKey: "inbox" }] }],
+  DRIVER: [{ label: "Road", items: [{ title: "Inbox", href: "/driver", icon: MessagesSquare, badgeKey: "inbox" }] }],
+  STORE_MANAGER: [{ label: "Outlet", items: [{ title: "Inbox", href: "/store", icon: MessagesSquare, badgeKey: "inbox" }] }],
 }
 
 export const HOME: Record<Role, string> = {

@@ -24,3 +24,15 @@ export const initials = (name: string) =>
     .slice(0, 2)
     .join("")
     .toUpperCase()
+
+/** "5 min ago", "3 h ago", "2 d ago" */
+export function timeAgo(iso: string | Date) {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
+  if (s < 60) return "just now"
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`
+  return `${Math.floor(s / 86400)} d ago`
+}
+
+export const fmtDateTime = (iso: string | Date) =>
+  new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Colombo" })

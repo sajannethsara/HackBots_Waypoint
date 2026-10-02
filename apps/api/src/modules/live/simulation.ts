@@ -11,6 +11,7 @@ import type { Brand, LatLng, LiveAlert, LiveStop, LiveTrip, LiveTripStatus } fro
 
 export interface SimStop {
   id: string
+  orderId: string
   seq: number
   orderRef: string
   outletId: string
@@ -39,11 +40,43 @@ export interface SimTrip {
   roadFactor: number
   depot: LatLng
   stops: SimStop[]
+  /** Road polylines per leg (depot → stop 1 … stop n → depot). Straight lines when absent. */
+  legs?: LatLng[][]
 }
 
 type Segment =
-  | { kind: "travel"; from: LatLng; to: LatLng; t0: number; t1: number; stopIdx: number; pathIdx: number }
+  | { kind: "travel"; from: LatLng; to: LatLng; t0: number; t1: number; stopIdx: number; pathIdx: number; geo: LegGeo }
   | { kind: "wait" | "service"; at: LatLng; t0: number; t1: number; stopIdx: number; pathIdx: number }
+
+/** A leg polyline with cumulative distances, so positions can be placed by distance travelled. */
+interface LegGeo {
+  pts: LatLng[]
+  cum: number[]
+  total: number
+}
+
+function legGeo(pts: LatLng[]): LegGeo {
+  const cum = [0]
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]
+    const b = pts[i]
+    const k = Math.cos((a.lat * Math.PI) / 180)
+    cum.push(cum[i - 1] + Math.hypot(b.lat - a.lat, (b.lng - a.lng) * k))
+  }
+  return { pts, cum, total: cum[cum.length - 1] || 1e-9 }
+}
+
+/** Point and compass heading at fraction `f` of the leg distance. */
+function along(g: LegGeo, f: number): { pos: LatLng; heading: number } {
+  const d = Math.max(0, Math.min(1, f)) * g.total
+  let i = 1
+  while (i < g.cum.length - 1 && g.cum[i] < d) i++
+  const a = g.pts[i - 1]
+  const b = g.pts[i] ?? a
+  const span = g.cum[i] - g.cum[i - 1] || 1e-9
+  const t = Math.max(0, Math.min(1, (d - g.cum[i - 1]) / span))
+  return { pos: { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t }, heading: bearing(a, b) }
+}
 
 interface Timeline {
   depart: number
@@ -79,7 +112,7 @@ export function buildTimeline(trip: SimTrip): Timeline {
   trip.stops.forEach((s, i) => {
     const travel = (i === 0 ? trip.outboundMin : trip.interStopMin) * travelFactor
     const arrive = t + travel
-    segments.push({ kind: "travel", from: pos, to: s.position, t0: t, t1: arrive, stopIdx: i, pathIdx: i })
+    segments.push({ kind: "travel", from: pos, to: s.position, t0: t, t1: arrive, stopIdx: i, pathIdx: i, geo: legGeo(trip.legs?.[i] ?? [pos, s.position]) })
     const start = Math.max(arrive, s.windowOpenMin)
     if (start > arrive) segments.push({ kind: "wait", at: s.position, t0: arrive, t1: start, stopIdx: i, pathIdx: i + 1 })
     const end = start + s.plannedServiceMin * (0.85 + r() * 0.35)
@@ -90,12 +123,16 @@ export function buildTimeline(trip: SimTrip): Timeline {
     pos = s.position
   })
   const back = t + trip.outboundMin * travelFactor
-  segments.push({ kind: "travel", from: pos, to: trip.depot, t0: t, t1: back, stopIdx: trip.stops.length, pathIdx: trip.stops.length })
+  const n = trip.stops.length
+  segments.push({ kind: "travel", from: pos, to: trip.depot, t0: t, t1: back, stopIdx: n, pathIdx: n, geo: legGeo(trip.legs?.[n] ?? [pos, trip.depot]) })
   return { depart: trip.plannedDepartMin + slip, segments, arrivals, completions, returnAt: back }
 }
 
-const lerp = (a: LatLng, b: LatLng, f: number): LatLng => ({ lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f })
-const bearing = (a: LatLng, b: LatLng) => (Math.atan2(b.lng - a.lng, b.lat - a.lat) * 180) / Math.PI
+/** Compass bearing in degrees (0 = north, 90 = east). */
+const bearing = (a: LatLng, b: LatLng) => {
+  const k = Math.cos((a.lat * Math.PI) / 180)
+  return ((Math.atan2((b.lng - a.lng) * k, b.lat - a.lat) * 180) / Math.PI + 360) % 360
+}
 
 export function tripAt(trip: SimTrip, tl: Timeline, now: number): LiveTrip {
   const path = [trip.depot, ...trip.stops.map((s) => s.position), trip.depot]
@@ -105,6 +142,7 @@ export function tripAt(trip: SimTrip, tl: Timeline, now: number): LiveTrip {
     const eta = Math.round(tl.arrivals[i])
     return {
       id: s.id,
+      orderId: s.orderId,
       seq: s.seq,
       orderRef: s.orderRef,
       outletId: s.outletId,
@@ -125,6 +163,8 @@ export function tripAt(trip: SimTrip, tl: Timeline, now: number): LiveTrip {
   let position = trip.depot
   let heading = 0
   let pathIndex = 0
+  let leg = 0
+  let legProgress = 0
   let locationLabel = "At depot"
   const current = tl.segments.find((seg) => now >= seg.t0 && now < seg.t1)
 
@@ -134,18 +174,23 @@ export function tripAt(trip: SimTrip, tl: Timeline, now: number): LiveTrip {
   } else if (now >= tl.returnAt) {
     status = "COMPLETED"
     pathIndex = path.length - 1
+    leg = trip.stops.length + 1
     locationLabel = "Back at depot"
   } else if (current?.kind === "travel") {
     const f = (now - current.t0) / Math.max(0.01, current.t1 - current.t0)
-    position = lerp(current.from, current.to, f)
-    heading = bearing(current.from, current.to)
+    const p = along(current.geo, f)
+    position = p.pos
+    heading = p.heading
     pathIndex = current.pathIdx
+    leg = current.stopIdx
+    legProgress = Math.round(f * 1000) / 1000
     const returning = current.stopIdx >= trip.stops.length
     status = returning ? "RETURNING" : "ON_ROUTE"
     locationLabel = returning ? "Returning to depot" : `En route to ${trip.stops[current.stopIdx].outletId}`
   } else if (current) {
     position = current.at
     pathIndex = current.pathIdx
+    leg = current.stopIdx + 1
     status = "AT_OUTLET"
     locationLabel = `${current.kind === "wait" ? "Waiting at" : "Unloading at"} ${trip.stops[current.stopIdx].outletId}`
   } else {
@@ -181,6 +226,8 @@ export function tripAt(trip: SimTrip, tl: Timeline, now: number): LiveTrip {
     stops,
     path,
     pathIndex,
+    leg,
+    legProgress,
   }
 }
 

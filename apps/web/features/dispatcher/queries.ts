@@ -2,10 +2,20 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import type { AssignOrderInput, DeferOrderInput, GeneratePlanInput } from "@waypoint/shared"
+import type { AssignOrderInput, CreateIssueInput, DeferOrderInput, GeneratePlanInput, ResolveIssueInput } from "@waypoint/shared"
 import { useWorkspace } from "@/hooks/use-workspace"
 import { api, ApiError, qs, type Violation } from "@/lib/api"
-import type { Dashboard, DemandOverview, OrdersResponse, Plan, Vehicle } from "@/lib/types"
+import type {
+  Dashboard,
+  DemandOverview,
+  IssueDetail,
+  IssuesResponse,
+  OrdersResponse,
+  Plan,
+  TripDetail,
+  TripsResponse,
+  Vehicle,
+} from "@/lib/types"
 
 /** All dispatcher data access in one place: query keys, fetchers and mutations. */
 
@@ -142,6 +152,101 @@ export function useDiscardPlan(planId?: string) {
   return useMutation({
     mutationFn: () => api(`/plans/${planId}`, { method: "DELETE" }),
     onSuccess: () => sync(),
+    onError,
+  })
+}
+
+// ── Trips ─────────────────────────────────────────────────
+
+export function useTrips() {
+  const { depotId, date, ready } = useWorkspace()
+  return useQuery({
+    queryKey: ["trips", depotId, date],
+    queryFn: () => api<TripsResponse>(`/trips${qs({ depotId, date })}`),
+    enabled: ready,
+    // Live columns move only while the replay clock runs; poll lightly then.
+    refetchInterval: (q) => (q.state.data?.clock?.running ? 10_000 : false),
+  })
+}
+
+export function useTripDetail(id: string) {
+  return useQuery({
+    queryKey: ["trip", id],
+    queryFn: () => api<TripDetail>(`/trips/${id}`),
+    refetchInterval: (q) => (q.state.data?.clock?.running ? 15_000 : false),
+  })
+}
+
+// ── Issues ────────────────────────────────────────────────
+
+export function useIssues(filters: { status?: string; stage?: string; severity?: string; q?: string }) {
+  const { depotId, ready } = useWorkspace()
+  return useQuery({
+    queryKey: ["issues", depotId, filters],
+    queryFn: () => api<IssuesResponse>(`/issues${qs({ depotId, ...filters })}`),
+    enabled: ready,
+    placeholderData: (prev) => prev,
+    refetchInterval: 20_000,
+  })
+}
+
+export function useIssueSummary() {
+  const { depotId, ready } = useWorkspace()
+  return useQuery({
+    queryKey: ["issues", depotId, "summary"],
+    queryFn: () => api<{ open: number }>(`/issues/summary${qs({ depotId })}`),
+    enabled: ready,
+    refetchInterval: 30_000,
+  })
+}
+
+export function useIssue(id: string) {
+  return useQuery({ queryKey: ["issue", id], queryFn: () => api<IssueDetail>(`/issues/${id}`) })
+}
+
+function useIssueCache() {
+  const qc = useQueryClient()
+  return (issue?: IssueDetail) => {
+    if (issue) qc.setQueryData(["issue", issue.id], issue)
+    qc.invalidateQueries({ queryKey: ["issues"] })
+    qc.invalidateQueries({ queryKey: ["trip"] })
+    qc.invalidateQueries({ queryKey: ["trips"] })
+    qc.invalidateQueries({ queryKey: ["dashboard"] })
+  }
+}
+
+export function useCreateIssue() {
+  const sync = useIssueCache()
+  return useMutation({
+    mutationFn: (input: CreateIssueInput) => api<{ id: string; ref: string }>("/issues", { method: "POST", json: input }),
+    onSuccess: (i) => {
+      sync()
+      toast.success(`${i.ref} reported`, { description: "Added to the issues queue." })
+    },
+    onError,
+  })
+}
+
+export function useAcknowledgeIssue(id: string) {
+  const sync = useIssueCache()
+  return useMutation({
+    mutationFn: () => api<IssueDetail>(`/issues/${id}/acknowledge`, { method: "POST" }),
+    onSuccess: (i) => {
+      sync(i)
+      toast.success(`${i.ref} acknowledged`)
+    },
+    onError,
+  })
+}
+
+export function useResolveIssue(id: string) {
+  const sync = useIssueCache()
+  return useMutation({
+    mutationFn: (input: ResolveIssueInput) => api<IssueDetail>(`/issues/${id}/resolve`, { method: "POST", json: input }),
+    onSuccess: (i) => {
+      sync(i)
+      toast.success(`${i.ref} resolved`, { description: "Resolution recorded and notifications sent." })
+    },
     onError,
   })
 }

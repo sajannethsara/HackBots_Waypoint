@@ -200,6 +200,16 @@ enum FuelEntryKind {
   ADJUSTMENT
 }
 
+enum ConversationKind {
+  DIRECT // dispatch desk <-> one person, no subject
+  ISSUE  // scoped to one issue
+}
+
+enum MessageKind {
+  TEXT
+  SYSTEM // posted by the platform (thread opened, issue resolved)
+}
+
 enum ForecastSource {
   BASELINE
   MODEL
@@ -220,6 +230,7 @@ model Depot {
   orders    Order[]
   demand    DemandWeekly[]
   forecasts DemandForecast[]
+  conversations Conversation[]
 }
 
 // district_travel.csv
@@ -364,6 +375,8 @@ model User {
   receipts          Receipt[]
   notifications     Notification[]
   auditLogs         AuditLog[]
+  conversations     Conversation[]    @relation("ConversationMember")
+  messagesSent      Message[]         @relation("MessageSender")
 }
 
 // ──────────────────────────────── Orders ────────────────────────────────
@@ -480,6 +493,8 @@ model Trip {
   loadedById       String?
   loadedBy         User?      @relation("TripLoadedBy", fields: [loadedById], references: [id])
   driverId         String?
+  /// Road geometry from Google Routes: { source, legs: [[lat,lng]...][], km, min, computedAt }
+  route            Json?
   driver           User?      @relation("TripDriver", fields: [driverId], references: [id])
   updatedAt        DateTime   @updatedAt @db.Timestamptz
   departedAt       DateTime?  @db.Timestamptz
@@ -624,6 +639,8 @@ model Issue {
   updatedAt    DateTime      @updatedAt @db.Timestamptz
   resolvedAt   DateTime?     @db.Timestamptz
 
+  conversations Conversation[]
+
   @@index([status, stage])
   @@index([tripId])
 }
@@ -712,4 +729,45 @@ model AppSetting {
   key       String   @id
   value     Json
   updatedAt DateTime @updatedAt @db.Timestamptz
+}
+
+// ───────────────────────────── Messaging ─────────────────────────────
+// Star topology: every conversation is between one depot's dispatch desk and one
+// member (loader, driver or store manager). Members never talk to each other.
+// The desk side is shared by all dispatchers of the depot, so unread state is per side.
+
+model Conversation {
+  id            String           @id @default(cuid())
+  key           String           @unique // "<memberId>:direct" | "<memberId>:<issueId>"
+  kind          ConversationKind
+  depotId       String
+  depot         Depot            @relation(fields: [depotId], references: [id])
+  memberId      String
+  member        User             @relation("ConversationMember", fields: [memberId], references: [id], onDelete: Cascade)
+  issueId       String?
+  issue         Issue?           @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  lastMessageAt DateTime?        @db.Timestamptz
+  deskUnread    Int              @default(0)
+  memberUnread  Int              @default(0)
+  createdAt     DateTime         @default(now()) @db.Timestamptz
+  messages      Message[]
+
+  @@index([depotId, lastMessageAt])
+  @@index([memberId, lastMessageAt])
+  @@index([issueId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String?      // null for SYSTEM
+  sender         User?        @relation("MessageSender", fields: [senderId], references: [id])
+  kind           MessageKind  @default(TEXT)
+  body           String       // plain text with @[type:id|label] mention tokens
+  mentions       Json         @default("[]") // resolved [{ type, id, label }]
+  clientId       String?      @unique // idempotent resend from flaky connections
+  createdAt      DateTime     @default(now()) @db.Timestamptz
+
+  @@index([conversationId, createdAt])
 }

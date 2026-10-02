@@ -89,7 +89,7 @@
     --card-foreground: oklch(0.985 0 0);
     --popover: oklch(0.205 0 0);
     --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.448 0.119 151.328);
+    --primary: #026630;
     --primary-foreground: oklch(0.982 0.018 155.826);
     --secondary: oklch(0.274 0.006 286.033);
     --secondary-foreground: oklch(0.985 0 0);
@@ -126,4 +126,50 @@
   html {
     @apply font-sans;
     }
+}
+/* ── Map indicators: subtle glow + radar ping, coloured per marker via --glow ── */
+@keyframes wp-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 3px color-mix(in oklch, var(--glow) 22%, transparent),
+      0 0 10px 1px color-mix(in oklch, var(--glow) 45%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px color-mix(in oklch, var(--glow) 28%, transparent),
+      0 0 22px 4px color-mix(in oklch, var(--glow) 60%, transparent);
+  }
+}
+@keyframes wp-ping {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.55;
+  }
+  80%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.wp-glow {
+  animation: wp-breathe 2.6s ease-in-out infinite;
+}
+.wp-glow-static {
+  box-shadow:
+    0 0 0 3px color-mix(in oklch, var(--glow) 20%, transparent),
+    0 0 12px 2px color-mix(in oklch, var(--glow) 40%, transparent);
+}
+.wp-ping {
+  animation: wp-ping 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+.wp-ping-fast {
+  animation: wp-ping 1.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wp-glow,
+  .wp-ping,
+  .wp-ping-fast {
+    animation: none;
+  }
 }

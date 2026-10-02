@@ -4,10 +4,13 @@ import { JwtModule } from "@nestjs/jwt"
 import { AuthGuard } from "./common/auth"
 import { ClockModule } from "./common/clock.service"
 import { PrismaModule } from "./common/prisma.service"
+import { ChatModule } from "./modules/chat/chat.module"
 import { AuthModule } from "./modules/auth/auth.module"
 import { DashboardModule } from "./modules/dashboard/dashboard.module"
 import { HealthModule } from "./modules/health/health.module"
+import { IssuesModule } from "./modules/issues/issues.module"
 import { LiveModule } from "./modules/live/live.module"
+import { TripsModule } from "./modules/trips/trips.module"
 import { OrdersModule } from "./modules/orders/orders.module"
 import { PlanningModule } from "./modules/planning/planning.module"
 import { ReferenceModule } from "./modules/reference/reference.module"
@@ -28,6 +31,9 @@ import { ReferenceModule } from "./modules/reference/reference.module"
     OrdersModule,
     PlanningModule,
     LiveModule,
+    IssuesModule,
+    ChatModule,
+    TripsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })

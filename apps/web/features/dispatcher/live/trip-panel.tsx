@@ -85,8 +85,8 @@ export function TripPanel({ trip, onClose }: { trip: LiveTrip; onClose: () => vo
       </ScrollArea>
 
       <div className="border-t p-2">
-        <Button variant="outline" size="sm" className="w-full" nativeButton={false} render={<Link href="/dispatcher/trips" />}>
-          <ExternalLink data-icon="inline-start" /> Open in Trips
+        <Button variant="outline" size="sm" className="w-full" nativeButton={false} render={<Link href={`/dispatcher/trips/${trip.id}`} />}>
+          <ExternalLink data-icon="inline-start" /> Open trip details
         </Button>
       </div>
     </div>

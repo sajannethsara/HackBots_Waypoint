@@ -20,6 +20,7 @@ export interface LiveClock {
 
 export interface LiveStop {
   id: string
+  orderId: string
   seq: number
   orderRef: string
   outletId: string
@@ -62,7 +63,21 @@ export interface LiveTrip {
   path: LatLng[]
   /** Index in `path` the vehicle has passed (completed portion). */
   pathIndex: number
+  /** Road leg the vehicle is on (0 = depot → stop 1, n = last stop → depot, n + 1 = done). */
+  leg: number
+  /** Distance fraction travelled along `leg` (0–1). */
+  legProgress: number
 }
+
+/** Road geometry for one trip, one polyline per leg: depot → stop 1 → … → stop n → depot. */
+export interface LiveRoute {
+  source: "mapbox" | "straight"
+  legs: [number, number][][]
+  km: number
+  min: number
+}
+
+export type LiveRoutes = Record<string, LiveRoute>
 
 export interface LiveAlert {
   id: string

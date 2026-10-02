@@ -26,6 +26,7 @@ import {
 import type { SessionUser } from "../../common/auth"
 import { ClockService } from "../../common/clock.service"
 import { PrismaService } from "../../common/prisma.service"
+import { RoutingService } from "../routing/routing.service"
 import { loadDepotContext, toEngineOrder } from "./engine-input"
 
 const PLANNABLE = ["SUBMITTED", "PLANNED", "DEFERRED"] as const
@@ -77,6 +78,7 @@ export class PlanningService {
   constructor(
     private readonly db: PrismaService,
     private readonly clock: ClockService,
+    private readonly routing: RoutingService,
   ) {}
 
   /** Latest non-superseded plan for a depot/day: the draft if one is open, else the published plan. */
@@ -367,6 +369,8 @@ export class PlanningService {
         data: { actorId: user.sub, action: "PLAN_PUBLISHED", entityType: "Plan", entityId: planId, after: { served: served.length, deferred: deferred.length, supersedes: previous.map((p) => p.id) } },
       })
     }, { timeout: 30_000 })
+    // Fetch road geometry for the published trips in the background (map + live replay).
+    void this.routing.ensure(full.trips.filter((t) => t.stops.length).map((t) => t.id))
     return this.get(planId)
   }
 

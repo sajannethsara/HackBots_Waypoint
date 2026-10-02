@@ -2,9 +2,9 @@
 
 import { useMemo } from "react"
 import type { LatLng } from "@waypoint/shared"
-import { TRIP_COLOR } from "../status"
+import { TRIP_COLOR, isMoving } from "../status"
 import { stopColor } from "./markers"
-import { splitPath, type LiveMapProps } from "./types"
+import { splitRoute, tripPoints, type LiveMapProps } from "./types"
 
 const W = 1000
 const H = 640
@@ -14,9 +14,11 @@ const PAD = 48
  * Network schematic used when no Google Maps key is configured: same data and visual
  * language (circles + connected lines), projected onto a plain canvas.
  */
-export default function SchematicLiveMap({ snapshot, trips, selectedId, onSelect }: LiveMapProps) {
+export default function SchematicLiveMap({ snapshot, trips: allTrips, routes, selectedId, onSelect, highlightStopId }: LiveMapProps) {
+  // Focus mode: a selected trip hides everything else.
+  const trips = selectedId ? allTrips.filter((t) => t.id === selectedId) : allTrips
   const project = useMemo(() => {
-    const pts = [snapshot.depot.position, ...snapshot.trips.flatMap((t) => t.stops.map((s) => s.position))]
+    const pts = [snapshot.depot.position, ...trips.flatMap((t) => tripPoints(t, routes?.[t.id]))]
     const lat0 = (pts.reduce((s, p) => s + p.lat, 0) / pts.length) * (Math.PI / 180)
     const xs = pts.map((p) => p.lng * Math.cos(lat0))
     const ys = pts.map((p) => -p.lat)
@@ -25,7 +27,8 @@ export default function SchematicLiveMap({ snapshot, trips, selectedId, onSelect
     const offX = (W - (maxX - minX) * scale) / 2
     const offY = (H - (maxY - minY) * scale) / 2
     return (p: LatLng) => ({ x: offX + (p.lng * Math.cos(lat0) - minX) * scale, y: offY + (-p.lat - minY) * scale })
-  }, [snapshot.depot.position, snapshot.trips])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot.depot.position, selectedId, snapshot.planId, routes])
 
   // District clusters give the schematic its geography: a soft halo + label per district.
   const districts = useMemo(() => {
@@ -66,7 +69,7 @@ export default function SchematicLiveMap({ snapshot, trips, selectedId, onSelect
       ))}
 
       {trips.map((t) => {
-        const { done, ahead } = splitPath(t)
+        const { done, ahead } = splitRoute(t, routes?.[t.id])
         const color = TRIP_COLOR[t.status]
         const o = dim(t.id) ? 0.15 : 1
         const w = t.id === selectedId ? 3.5 : 2.2
@@ -84,8 +87,13 @@ export default function SchematicLiveMap({ snapshot, trips, selectedId, onSelect
           const c = stopColor(s)
           const filled = s.status !== "PENDING"
           return (
+            <g key={s.id}>
+            {s.id === highlightStopId && (
+              <circle cx={p.x} cy={p.y} r={14} fill="none" stroke="#ef4444" strokeWidth={2.5}>
+                <animate attributeName="r" values="10;18;10" dur="1.4s" repeatCount="indefinite" />
+              </circle>
+            )}
             <circle
-              key={s.id}
               cx={p.x}
               cy={p.y}
               r={5}
@@ -97,6 +105,7 @@ export default function SchematicLiveMap({ snapshot, trips, selectedId, onSelect
             >
               <title>{`${s.outletId} · ETA ${Math.floor(s.etaMin / 60)}:${String(s.etaMin % 60).padStart(2, "0")}`}</title>
             </circle>
+            </g>
           )
         }),
       )}
@@ -111,7 +120,7 @@ export default function SchematicLiveMap({ snapshot, trips, selectedId, onSelect
       </g>
 
       {trips
-        .filter((t) => t.status !== "SCHEDULED" && t.status !== "COMPLETED")
+        .filter((t) => isMoving(t.status))
         .map((t) => {
           const p = project(t.position)
           const color = TRIP_COLOR[t.status]
@@ -142,7 +151,7 @@ export default function SchematicLiveMap({ snapshot, trips, selectedId, onSelect
           )
         })}
       <text x={W - 12} y={H - 12} textAnchor="end" className="fill-muted-foreground text-[11px]">
-        Schematic view · set GOOGLE_MAPS_API_KEY for street map
+        Schematic view · set MAPBOX_ACCESS_TOKEN for the street map
       </text>
     </svg>
   )

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useState, useSyncExternalStore } from "react"
 import { io } from "socket.io-client"
 import { toast } from "sonner"
-import type { LiveClock, LiveSnapshot } from "@waypoint/shared"
+import type { LiveClock, LiveRoutes, LiveSnapshot } from "@waypoint/shared"
 import { useWorkspace } from "@/hooks/use-workspace"
 import { api, ApiError, qs } from "@/lib/api"
 
@@ -28,7 +28,7 @@ const useTabVisible = () =>
  * The socket is opened only while this view is mounted and the tab is visible, so the
  * server does no live work for dashboards nobody is looking at.
  */
-export function useLiveSnapshot(wsUrl?: string) {
+export function useLiveSnapshot(wsUrl?: string, enabled = true) {
   const { depotId, date, ready } = useWorkspace()
   const qc = useQueryClient()
   const visible = useTabVisible()
@@ -37,11 +37,11 @@ export function useLiveSnapshot(wsUrl?: string) {
   const query = useQuery({
     queryKey: liveKey(depotId, date),
     queryFn: () => api<LiveSnapshot>(`/live/snapshot${qs({ depotId, date })}`),
-    enabled: ready,
+    enabled: ready && enabled,
   })
 
   useEffect(() => {
-    if (!ready || !visible) return
+    if (!ready || !visible || !enabled) return
     const base = wsUrl || `${window.location.protocol}//${window.location.hostname}:4000`
     const socket = io(`${base}/live`, { withCredentials: true, transports: ["websocket"], reconnectionDelayMax: 5000 })
     socket.on("connect", () => {
@@ -56,9 +56,24 @@ export function useLiveSnapshot(wsUrl?: string) {
     return () => {
       socket.disconnect()
     }
-  }, [ready, visible, depotId, date, wsUrl, qc])
+  }, [ready, visible, enabled, depotId, date, wsUrl, qc])
 
   return { ...query, link: (visible ? link : "paused") as LinkState }
+}
+
+/**
+ * Road geometry for the day, loaded once per plan (it never changes while trips run).
+ * Polls briefly only while Google routes are still being computed after a publish.
+ */
+export function useLiveRoutes(planId: string | null | undefined, tripCount: number) {
+  const { depotId, date, ready } = useWorkspace()
+  return useQuery({
+    queryKey: ["live-routes", depotId, date, planId],
+    queryFn: () => api<LiveRoutes>(`/live/routes${qs({ depotId, date })}`),
+    enabled: ready && !!planId,
+    staleTime: Infinity,
+    refetchInterval: (q) => (q.state.data && Object.keys(q.state.data).length >= tripCount ? false : 4_000),
+  })
 }
 
 export function useClockControl() {

@@ -9,6 +9,7 @@ import {
 } from "@waypoint/shared"
 import { CurrentUser, Roles, type SessionUser } from "../../common/auth"
 import { ZodPipe } from "../../common/zod.pipe"
+import { RoutingModule } from "../routing/routing.service"
 import { PlanningService } from "./planning.service"
 
 @Roles("DISPATCHER")
@@ -67,5 +68,5 @@ export class PlanningController {
   }
 }
 
-@Module({ controllers: [PlanningController], providers: [PlanningService], exports: [PlanningService] })
+@Module({ imports: [RoutingModule], controllers: [PlanningController], providers: [PlanningService], exports: [PlanningService] })
 export class PlanningModule {}

@@ -1,4 +1,20 @@
-import type { Brand, DeferralReason, DockType, ParkingConstraint, Role } from "@waypoint/shared"
+import type {
+  Brand,
+  DeferralReason,
+  DockType,
+  IssuePlaybookAction,
+  IssueSeverity,
+  IssueStage,
+  IssueStatus,
+  IssueType,
+  LiveAlert,
+  LiveClock,
+  LiveRoute,
+  LiveTrip,
+  LiveTripStatus,
+  ParkingConstraint,
+  Role,
+} from "@waypoint/shared"
 
 /** Response shapes of the Waypoint API (only the fields the UI reads). */
 
@@ -218,4 +234,172 @@ export interface Dashboard {
   trips: { id: string; ref: string; vehicleId: string; brand: Brand; districtId: string; status: string; driver: string | null; stops: number; done: number; eta: number; atRisk: boolean }[]
   upcoming: { time: number; outletId: string; orderRef: string; brand: Brand; tripRef: string; status: string; atRisk: boolean }[]
   activity: { id: string; action: string; at: string; actor: string; entityType: string; entityId: string; after: Record<string, unknown> | null }[]
+}
+
+// ── Trips ─────────────────────────────────────────────────
+
+
+export interface TripRow {
+  id: string
+  ref: string
+  tripNo: number
+  brand: Brand
+  districtId: string
+  vehicleId: string
+  vehicleType: "TRUCK" | "VAN"
+  vehicleTemp: "REEFER" | "AMBIENT"
+  driver: string | null
+  stops: number
+  openIssues: number
+  plannedDepartMin: number
+  plannedDurationMin: number
+  plannedKm: number
+  plannedFuelL: number
+  loadWeightKg: number
+  loadVolumeM3: number
+  utilPct: number
+  live: {
+    status: LiveTripStatus
+    delayMin: number
+    progressPct: number
+    stopsDone: number
+    locationLabel: string
+    etaReturnMin: number
+    nextStop: { outletId: string; etaMin: number } | null
+  } | null
+}
+
+export interface TripsResponse {
+  plan: { id: string; version: number; status: string; publishedAt: string | null } | null
+  clock: LiveClock | null
+  trips: TripRow[]
+}
+
+export interface IssueRow {
+  id: string
+  ref: string
+  clientId: string | null
+  stage: IssueStage
+  type: IssueType
+  severity: IssueSeverity
+  status: IssueStatus
+  description: string
+  quantity: number | null
+  tripId: string | null
+  stopId: string | null
+  orderId: string | null
+  outletId: string | null
+  vehicleId: string | null
+  resolution: string | null
+  createdAt: string
+  updatedAt: string
+  resolvedAt: string | null
+  reportedBy: { name: string; role: string }
+  resolvedBy: { name: string } | null
+  trip: { id: string; ref: string; vehicleId: string; brand: Brand; districtId: string } | null
+  stop: { seq: number } | null
+  order: { id: string; ref: string } | null
+  outlet: { id: string; name: string; districtId: string } | null
+}
+
+export interface IssuesResponse {
+  issues: IssueRow[]
+  counts: { open: number; acknowledged: number; resolved: number; highOpen: number; all: number }
+}
+
+export interface IssueDetail extends Omit<IssueRow, "trip" | "stop" | "order" | "outlet" | "reportedBy"> {
+  reportedBy: { name: string; role: string; phone: string | null; email: string }
+  trip: {
+    id: string
+    ref: string
+    vehicleId: string
+    brand: Brand
+    districtId: string
+    status: string
+    plannedDepartMin: number
+    driver: { name: string; phone: string | null } | null
+    plan: { version: number; status: string; date: string }
+  } | null
+  stop: { seq: number; plannedArrivalMin: number; status: string } | null
+  order: { id: string; ref: string; temp: "CHILLED" | "AMBIENT"; units: number; weightKg: number; volumeM3: number; lines: OrderLine[] } | null
+  orderLine: OrderLine | null
+  outlet: { id: string; name: string; districtId: string; windowOpenMin: number; windowCloseMin: number; managers: { name: string; phone: string | null }[] } | null
+  vehicle: { id: string; type: string; temp: string; status: string } | null
+  history: { id: string; action: string; createdAt: string; actor: { name: string } | null; after: Record<string, unknown> | null }[]
+  playbook: IssuePlaybookAction[]
+}
+
+export interface AuditEntry {
+  id: string
+  action: string
+  at: string
+  actor: string
+  entityType: string
+  entityId: string
+  after: Record<string, unknown> | null
+}
+
+export interface TripDetailStop {
+  id: string
+  seq: number
+  status: string
+  plannedArrivalMin: number
+  plannedWaitMin: number
+  plannedServiceMin: number
+  atRisk: boolean
+  riskReason: string | null
+  arrivedAt: string | null
+  completedAt: string | null
+  proof: { recipientName: string; capturedAt: string } | null
+  order: {
+    id: string
+    ref: string
+    brand: Brand
+    temp: "CHILLED" | "AMBIENT"
+    units: number
+    weightKg: number
+    volumeM3: number
+    deferCount: number
+    status: string
+    outlet: OutletLite & { name: string; lat: number | null; lng: number | null }
+    lines: OrderLine[]
+    receipt: { status: string; confirmedAt: string } | null
+    decisions: { priorityScore: number; scoreBreakdown: Record<string, unknown>; source: string; explanation: string | null }[]
+  }
+}
+
+export interface TripDetail {
+  route: LiveRoute | null
+  trip: {
+    id: string
+    ref: string
+    tripNo: number
+    brand: Brand
+    districtId: string
+    status: string
+    plannedDepartMin: number
+    plannedDurationMin: number
+    plannedKm: number
+    plannedFuelL: number
+    loadWeightKg: number
+    loadVolumeM3: number
+    loadedAt: string | null
+    departedAt: string | null
+    completedAt: string | null
+    plan: { id: string; version: number; status: string; date: string; depotId: string; publishedAt: string | null; generatedAt: string; engineVersion: string; publishedBy: { name: string } | null }
+    vehicle: Vehicle
+    driver: { id: string; name: string; phone: string | null; email: string } | null
+    loadedBy: { name: string } | null
+    district: { id: string; depotToDistrictKm: number; depotToDistrictMin: number; interStopKm: number; interStopMin: number; roadClass: string }
+    stops: TripDetailStop[]
+    deliveryEvents: { id: string; type: string; occurredAt: string }[]
+  }
+  depot: { id: string; name: string; position: { lat: number; lng: number } }
+  sibling: { id: string; ref: string; tripNo: number; brand: Brand; districtId: string; plannedDepartMin: number; plannedDurationMin: number; plannedFuelL: number } | null
+  fuelUsedThisWeekL: number | null
+  live: LiveTrip | null
+  clock: LiveClock | null
+  alerts: LiveAlert[]
+  issues: (Omit<IssueRow, "trip" | "order" | "outlet"> & { stop: { seq: number } | null })[]
+  audit: AuditEntry[]
 }

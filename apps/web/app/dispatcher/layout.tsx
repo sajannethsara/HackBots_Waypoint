@@ -1,20 +1,8 @@
-"use client"
+import { DispatcherShell } from "@/features/dispatcher/dispatcher-shell"
 
-import { AppSidebar } from "@/components/layout/app-sidebar"
-import { WorkspaceBar } from "@/components/layout/workspace-bar"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { WorkspaceProvider } from "@/hooks/use-workspace"
+// The realtime URL is a runtime setting (PUBLIC_WS_URL), so this layout must not be prerendered.
+export const dynamic = "force-dynamic"
 
 export default function DispatcherLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <WorkspaceProvider>
-      <SidebarProvider>
-        <AppSidebar role="DISPATCHER" />
-        <SidebarInset className="min-w-0 bg-muted/30">
-          <WorkspaceBar />
-          <div className="mx-auto w-full max-w-[1440px] flex-1 p-4 md:p-5">{children}</div>
-        </SidebarInset>
-      </SidebarProvider>
-    </WorkspaceProvider>
-  )
+  return <DispatcherShell wsUrl={process.env.PUBLIC_WS_URL || undefined}>{children}</DispatcherShell>
 }
