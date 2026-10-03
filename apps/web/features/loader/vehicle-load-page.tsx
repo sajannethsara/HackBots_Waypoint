@@ -1,10 +1,11 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { ArrowLeft, Box, CircleCheck, Clock, Info, Lock, Play, RefreshCw, Snowflake, TriangleAlert, Truck, UserRound, Weight } from "lucide-react"
+import { ArrowLeft, ArrowRight, Box, CircleCheck, PackageCheck, Undo2, Clock, Info, Lock, Play, RefreshCw, Snowflake, TriangleAlert, Truck, UserRound, Weight } from "lucide-react"
 import { toast } from "sonner"
-import { formatWindow, minToHHMM, type LoaderCapacityBreach, type LoaderStop, type LoaderTrip } from "@waypoint/shared"
+import { formatWindow, ISSUE_TYPE_META, minToHHMM, type LoaderCapacityBreach, type LoaderIssue, type LoaderStop, type LoaderTrip } from "@waypoint/shared"
 import { BrandBadge, TagBadge, TONE } from "@/components/shared/badges"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -18,8 +19,8 @@ import { ApiError } from "@/lib/api"
 import { fmtNum } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { CapacityBreachModal } from "./capacity-breach-modal"
-import { cargoSpec, claimState, destination, loadingOrder, statusPill, stowedLoad, type ClaimState } from "./model"
-import { confirmFailure, useClaimTrip, useConfirmStop, useLoaderTrip } from "./queries"
+import { cargoSpec, claimState, destination, loadingOrder, statusPill, stopIssues, stowedLoad, unfinishedStops, type ClaimState } from "./model"
+import { blockingStops, confirmFailure, useClaimTrip, useCompleteTrip, useConfirmStop, useLoaderTrip, useUnclaimTrip } from "./queries"
 import { ReportIssueDialog } from "./report-issue-dialog"
 
 export function VehicleLoadPage({ tripId }: { tripId: string }) {
@@ -59,16 +60,34 @@ export function VehicleLoadPage({ tripId }: { tripId: string }) {
 }
 
 function LoadList({ trip, state, depotName, onRefresh, refreshing }: { trip: LoaderTrip; state: ClaimState; depotName?: string; onRefresh: () => void; refreshing: boolean }) {
+  const router = useRouter()
   const confirm = useConfirmStop(trip.id)
   const claim = useClaimTrip()
+  const complete = useCompleteTrip()
+  const unclaim = useUnclaimTrip()
+  const [blocked, setBlocked] = useState<string[]>([])
   const [breach, setBreach] = useState<{ breach: LoaderCapacityBreach; stop: LoaderStop } | null>(null)
   const [inactive, setInactive] = useState<string | null>(null)
   const [reporting, setReporting] = useState<{ stopId?: string } | null>(null)
   const pill = statusPill(trip, state)
   const load = stowedLoad(trip)
   const order = loadingOrder(trip.stops)
-  const next = order.find((s) => s.loadStatus !== "STOWED")
+  const unfinished = unfinishedStops(trip)
+  const heldBack = trip.stops.filter((s) => s.loadStatus !== "STOWED" && stopIssues(trip, s.id).length > 0)
+  const next = order.find((s) => unfinished.includes(s))
   const canLoad = state === "mine" && !inactive
+
+  const onFinish = () =>
+    complete.mutate(trip.id, {
+      onSuccess: () => router.push(`/loader/vehicles/${trip.id}/released`),
+      onError: (err) => {
+        const stops = blockingStops(err)
+        if (stops) setBlocked(stops.map((b) => b.stopId))
+        const f = confirmFailure(err)
+        if (!stops && f.kind === "inactive") setInactive(f.message)
+        else toast.error(err.message)
+      },
+    })
 
   const onConfirm = (stop: LoaderStop) =>
     confirm.mutate(stop.id, {
@@ -78,6 +97,15 @@ function LoadList({ trip, state, depotName, onRefresh, refreshing }: { trip: Loa
         else if (f.kind === "inactive") setInactive(f.message)
         else toast.error(f.message)
       },
+    })
+
+  const onUnclaim = () =>
+    unclaim.mutate(trip.id, {
+      onSuccess: () => {
+        toast.success(`${trip.vehicle.id} unclaimed and back in the queue`)
+        router.push("/loader/queue")
+      },
+      onError: (err) => toast.error(err.message),
     })
 
   const onClaim = () =>
@@ -186,10 +214,37 @@ function LoadList({ trip, state, depotName, onRefresh, refreshing }: { trip: Loa
               pending={confirm.isPending && confirm.variables === s.id}
               onConfirm={() => onConfirm(s)}
               onReport={() => setReporting({ stopId: s.id })}
+              issues={stopIssues(trip, s.id)}
+              blocked={blocked.includes(s.id) && unfinished.includes(s)}
             />
           ))}
         </ol>
       </Card>
+
+      {canLoad && (
+        // Sticky so finishing is always in reach, however long the loading sequence is.
+        <Card className="sticky bottom-3 z-10 flex-row flex-wrap items-center gap-4 px-4 py-3 shadow-lg ring-1 ring-primary/20">
+          <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset", unfinished.length ? TONE.gray : TONE.green)}>
+            <PackageCheck className="size-5" />
+          </span>
+          <div className="min-w-48 flex-1">
+            <p className="text-sm font-semibold">Finish loading</p>
+            <p className="text-sm text-muted-foreground">
+              {load.stowed} of {trip.stops.length} stowed
+              {heldBack.length > 0 && ` · ${heldBack.length} held back with an open issue (${heldBack.map((s) => s.order.ref).join(", ")})`}
+              {unfinished.length > 0
+                ? ` · ${unfinished.length} still to load or report: ${unfinished.map((s) => s.order.ref).join(", ")}`
+                : " · ready to hand over to the driver"}
+            </p>
+          </div>
+          <Button variant="ghost" onClick={onUnclaim} disabled={unclaim.isPending || complete.isPending}>
+            <Undo2 /> {unclaim.isPending ? "Unclaiming…" : "Unclaim"}
+          </Button>
+          <Button onClick={onFinish} disabled={unfinished.length > 0 || complete.isPending}>
+            {complete.isPending ? "Finishing…" : "Finish loading & release"} <ArrowRight />
+          </Button>
+        </Card>
+      )}
 
       <CapacityBreachModal breach={breach?.breach ?? null} stop={breach?.stop ?? null} tripId={trip.id} vehicleId={trip.vehicle.id} onOpenChange={(o) => !o && setBreach(null)} />
       <ReportIssueDialog key={reporting?.stopId ?? "trip"} trip={trip} stopId={reporting?.stopId} open={!!reporting} onOpenChange={(o) => !o && setReporting(null)} />
@@ -223,7 +278,14 @@ function ReadOnlyNotice({ trip, state, onClaim, claiming }: { trip: LoaderTrip; 
     <Alert>
       <CircleCheck />
       <AlertTitle>{statusPill(trip, state).label}</AlertTitle>
-      <AlertDescription>Loading for this vehicle is finished. This view is read-only.</AlertDescription>
+      <AlertDescription>
+        <p>Loading for this vehicle is finished. This view is read-only.</p>
+        {trip.status === "LOADED" && (
+          <Button variant="outline" size="sm" className="mt-2" render={<Link href={`/loader/vehicles/${trip.id}/released`} />}>
+            View release receipt <ArrowRight />
+          </Button>
+        )}
+      </AlertDescription>
     </Alert>
   )
 }
@@ -273,6 +335,8 @@ function StopRow({
   pending,
   onConfirm,
   onReport,
+  issues,
+  blocked,
 }: {
   stop: LoaderStop
   position: number
@@ -282,11 +346,22 @@ function StopRow({
   pending: boolean
   onConfirm: () => void
   onReport: () => void
+  issues: LoaderIssue[]
+  /** The API refused to finish the trip because of this stop. */
+  blocked: boolean
 }) {
   const stowed = stop.loadStatus === "STOWED"
+  const held = !stowed && issues.length > 0
   const place = position === 1 ? "Bulkhead" : position === total ? "Tailgate" : position <= total / 2 ? "Front" : "Rear"
   return (
-    <li className={cn("overflow-hidden rounded-lg border", active && "border-primary ring-1 ring-primary", stowed && "bg-muted/40")}>
+    <li
+      className={cn(
+        "overflow-hidden rounded-lg border",
+        active && "border-primary ring-1 ring-primary",
+        blocked && "border-destructive ring-1 ring-destructive",
+        stowed && "bg-muted/40",
+      )}
+    >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2.5">
         <span className={cn("grid w-20 shrink-0 justify-items-center rounded-md px-2 py-1", active ? "bg-primary text-primary-foreground" : "bg-muted")}>
           <span className="text-xs font-semibold">SEQ #{position}</span>
@@ -294,7 +369,9 @@ function StopRow({
         </span>
         <div className="w-28 shrink-0">
           <p className="text-sm font-semibold">{stop.order.ref}</p>
-          <p className={cn("text-xs", active ? "font-medium text-primary" : "text-muted-foreground")}>{active ? "Load next" : `Delivery stop ${stop.seq}`}</p>
+          <p className={cn("text-xs", active ? "font-medium text-primary" : held || blocked ? "font-medium text-destructive" : "text-muted-foreground")}>
+            {blocked ? "Load or report this" : held ? "Held back" : active ? "Load next" : `Delivery stop ${stop.seq}`}
+          </p>
         </div>
         <div className="min-w-40 flex-1">
           <p className="truncate text-sm font-medium">{stop.outlet.name}</p>
@@ -313,6 +390,18 @@ function StopRow({
           </p>
         </div>
       </div>
+
+      {issues.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 border-t bg-red-50/60 px-3 py-1.5 text-xs dark:bg-red-500/5">
+          <TriangleAlert className="size-3.5 text-destructive" />
+          {issues.map((i) => (
+            <TagBadge key={i.id} tone="red" title={i.description}>
+              {i.ref} · {ISSUE_TYPE_META[i.type].label}
+            </TagBadge>
+          ))}
+          <span className="text-muted-foreground">{held ? "Reported to dispatch: this stop can stay off the truck." : "Reported to dispatch."}</span>
+        </div>
+      )}
 
       <table className="w-full border-t text-sm">
         <thead className="bg-muted/50 text-[10px] tracking-wider text-muted-foreground uppercase">

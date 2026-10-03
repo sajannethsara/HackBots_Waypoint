@@ -35,6 +35,8 @@ export interface LoaderIssue {
   severity: IssueSeverity
   status: IssueStatus
   description: string
+  /** The stop it concerns, if any: a flagged stop does not block finishing the trip. */
+  stopId: string | null
 }
 
 export interface LoaderTrip {
@@ -48,6 +50,9 @@ export interface LoaderTrip {
   loadVolumeM3: number
   claimedBy: { id: string; name: string } | null
   claimedAt: string | null
+  /** Set when the loader finishes loading (status LOADED). */
+  loadedBy: { id: string; name: string } | null
+  loadedAt: string | null
   driver: { name: string } | null
   vehicle: { id: string; type: VehicleType; temp: VehicleTemp; weightCapKg: number; volumeCapM3: number }
   district: { id: string }
@@ -61,6 +66,12 @@ export interface LoaderCapacityBreach {
   message: string
   weight: { loaded: number; cap: number }
   volume: { loaded: number; cap: number }
+}
+
+/** Body of the 400 returned when a trip cannot be finished: the stops neither stowed nor flagged with an issue. */
+export interface LoaderCompleteBlocked {
+  message: string
+  blocking: { stopId: string; seq: number; orderRef: string; outletName: string; loadStatus: LoadStatus }[]
 }
 
 // ───────────────────────────── Reporting a loading issue ─────────────────────────────

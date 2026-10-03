@@ -7,6 +7,7 @@ import {
   minToHHMM,
   type CreateIssueInput,
   type LoaderCapacityBreach,
+  type LoaderCompleteBlocked,
   type LoaderIssueRequest,
   type LoaderIssueResult,
   type LoaderQueueFilter,
@@ -32,8 +33,9 @@ const round2 = (n: number) => Math.round(n * 100) / 100
 const queueInclude = {
   vehicle: { select: { id: true, type: true, temp: true, weightCapKg: true, volumeCapM3: true } },
   claimedBy: { select: { id: true, name: true } },
+  loadedBy: { select: { id: true, name: true } },
   driver: { select: { name: true } },
-  issues: { where: OPEN_LOADING_ISSUE, orderBy: { createdAt: "desc" }, select: { id: true, ref: true, type: true, severity: true, status: true, description: true } },
+  issues: { where: OPEN_LOADING_ISSUE, orderBy: { createdAt: "desc" }, select: { id: true, ref: true, type: true, severity: true, status: true, description: true, stopId: true } },
   stops: {
     orderBy: { seq: "asc" },
     select: {
@@ -58,6 +60,12 @@ const queueInclude = {
 
 type QueueRow = Prisma.TripGetPayload<{ include: typeof queueInclude }>
 
+/** The rule every loading write shares: only the loader holding the trip, and only while it is being loaded. */
+function assertLoadingByMe(trip: { claimedById: string | null; status: string }, user: SessionUser) {
+  if (trip.claimedById !== user.sub) throw new ForbiddenException("You do not have this trip claimed")
+  if (trip.status !== "LOADING") throw new ConflictException("This trip is not being loaded")
+}
+
 /** The one shape every loader trip response takes (see LoaderTrip in @waypoint/shared). */
 function toLoaderTrip(t: QueueRow): LoaderTrip {
   return {
@@ -71,6 +79,8 @@ function toLoaderTrip(t: QueueRow): LoaderTrip {
     loadVolumeM3: t.loadVolumeM3,
     claimedBy: t.claimedBy,
     claimedAt: t.claimedAt?.toISOString() ?? null,
+    loadedBy: t.loadedBy,
+    loadedAt: t.loadedAt?.toISOString() ?? null,
     driver: t.driver,
     vehicle: t.vehicle,
     district: { id: t.districtId },
@@ -198,8 +208,7 @@ export class LoaderService {
         },
       })
       const { trip } = stop
-      if (trip.claimedById !== user.sub) throw new ForbiddenException("You do not have this trip claimed")
-      if (trip.status !== "LOADING") throw new ConflictException("This trip is not being loaded")
+      assertLoadingByMe(trip, user)
       // Already confirmed: a repeat tap changes nothing and returns the stop as the first confirm did.
       if (stop.loadStatus === "STOWED") return tx.stop.findUniqueOrThrow({ where: { id: stop.id } })
 
@@ -223,6 +232,64 @@ export class LoaderService {
       })
       return updated
     })
+  }
+
+  /**
+   * Finish loading: the trip becomes LOADED and is handed over for departure. Every stop must be
+   * stowed or held back with an unresolved issue (dispatch already knows about it). Only the stowed
+   * orders become LOADED; held-back orders stay PLANNED for dispatch to re-plan. The trip row is
+   * locked first, so a confirm or a second complete arriving at the same moment waits its turn.
+   */
+  async completeTrip(user: SessionUser, tripId: string): Promise<LoaderTrip> {
+    await this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${tripId} FOR UPDATE`
+      const trip = await tx.trip.findUnique({
+        where: { id: tripId },
+        select: {
+          claimedById: true,
+          status: true,
+          stops: {
+            orderBy: { seq: "asc" },
+            select: {
+              id: true,
+              seq: true,
+              loadStatus: true,
+              orderId: true,
+              order: { select: { ref: true, outlet: { select: { name: true } } } },
+              issues: { where: { status: { not: "RESOLVED" } }, select: { id: true } },
+            },
+          },
+        },
+      })
+      if (!trip) throw new NotFoundException("Trip not found")
+      assertLoadingByMe(trip, user)
+
+      const blocking = trip.stops.filter((s) => s.loadStatus !== "STOWED" && s.issues.length === 0)
+      if (blocking.length) {
+        const list = blocking.map((s) => `${s.order.ref} → ${s.order.outlet.name} (stop ${s.seq}, ${s.loadStatus.toLowerCase()})`).join("; ")
+        throw new BadRequestException({
+          message: `Cannot finish loading: ${blocking.length === 1 ? "1 stop is" : `${blocking.length} stops are`} neither stowed nor reported: ${list}`,
+          blocking: blocking.map((s) => ({ stopId: s.id, seq: s.seq, orderRef: s.order.ref, outletName: s.order.outlet.name, loadStatus: s.loadStatus })),
+        } satisfies LoaderCompleteBlocked)
+      }
+
+      const stowed = trip.stops.filter((s) => s.loadStatus === "STOWED")
+      const heldBack = trip.stops.filter((s) => s.loadStatus !== "STOWED")
+      const loadedAt = new Date()
+      await tx.trip.update({ where: { id: tripId }, data: { status: "LOADED", loadedById: user.sub, loadedAt } })
+      await tx.order.updateMany({ where: { id: { in: stowed.map((s) => s.orderId) }, status: "PLANNED" }, data: { status: "LOADED" } })
+      await tx.auditLog.create({
+        data: {
+          actorId: user.sub,
+          action: "TRIP_LOADED",
+          entityType: "Trip",
+          entityId: tripId,
+          before: { status: "LOADING", loadedAt: null },
+          after: { status: "LOADED", loadedById: user.sub, loadedAt: loadedAt.toISOString(), stowed: stowed.length, heldBack: heldBack.map((s) => s.order.ref) },
+        },
+      })
+    })
+    return this.getTripDetail(tripId)
   }
 
   /**
@@ -331,6 +398,11 @@ export class LoaderController {
   @Post("trips/:tripId/unclaim")
   unclaim(@CurrentUser() user: SessionUser, @Param("tripId") tripId: string) {
     return this.loader.unclaimTrip(user, tripId)
+  }
+
+  @Post("trips/:tripId/complete")
+  complete(@CurrentUser() user: SessionUser, @Param("tripId") tripId: string) {
+    return this.loader.completeTrip(user, tripId)
   }
 
   @Post("issues")

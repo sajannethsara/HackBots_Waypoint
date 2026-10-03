@@ -43,3 +43,12 @@ export function stowedLoad(trip: LoaderTrip) {
     volumeM3: stowed.reduce((t, s) => t + s.order.volumeM3, 0),
   }
 }
+
+/** Stops that still stop the trip being finished: not stowed and not flagged with an open issue. */
+export function unfinishedStops(trip: LoaderTrip) {
+  const flagged = new Set(trip.issues.map((i) => i.stopId).filter(Boolean))
+  return trip.stops.filter((s) => s.loadStatus !== "STOWED" && !flagged.has(s.id))
+}
+
+/** Open issues raised against one stop. */
+export const stopIssues = (trip: LoaderTrip, stopId: string) => trip.issues.filter((i) => i.stopId === stopId)

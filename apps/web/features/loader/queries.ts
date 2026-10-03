@@ -1,7 +1,7 @@
 "use client"
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import type { LoaderCapacityBreach, LoaderIssueInput, LoaderIssueResult, LoaderQueueFilter, LoaderTrip } from "@waypoint/shared"
+import type { LoaderCapacityBreach, LoaderCompleteBlocked, LoaderIssueInput, LoaderIssueResult, LoaderQueueFilter, LoaderTrip } from "@waypoint/shared"
 import { api, ApiError } from "@/lib/api"
 
 /** All loader data access in one place: query keys, fetchers and mutations. */
@@ -58,6 +58,22 @@ export function useConfirmStop(tripId: string) {
     onSettled: () =>
       Promise.all([qc.invalidateQueries({ queryKey: loaderKeys.trip(tripId) }), qc.invalidateQueries({ queryKey: ["loader", "queue"] })]),
   })
+}
+
+/** Finish loading: the trip becomes LOADED and is handed over for departure. */
+export function useCompleteTrip() {
+  const settle = useSettleTrip()
+  return useMutation({
+    mutationFn: (tripId: string) => api<LoaderTrip>(`/loader/trips/${tripId}/complete`, { method: "POST" }),
+    onSuccess: (trip) => settle(trip),
+    onError: () => settle(),
+  })
+}
+
+/** The stops the API says still block finishing, if that is why it refused. */
+export function blockingStops(err: unknown): LoaderCompleteBlocked["blocking"] | null {
+  if (!(err instanceof ApiError) || err.status !== 400) return null
+  return (err.body as Partial<LoaderCompleteBlocked>).blocking ?? null
 }
 
 /** Report a loading problem; the trip and queue refresh so the vehicle shows as flagged. */

@@ -232,6 +232,11 @@ function TripCard({ trip, state }: { trip: LoaderTrip; state: ClaimState }) {
               <Lock /> In progress
             </Button>
           )}
+          {trip.status === "LOADED" && (
+            <Button variant="outline" size="sm" render={<Link href={`/loader/vehicles/${trip.id}/released`} />}>
+              Receipt <ArrowRight />
+            </Button>
+          )}
         </div>
       </div>
     </Card>
