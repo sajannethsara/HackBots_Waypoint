@@ -5,6 +5,8 @@ import { ZodPipe } from "../../common/zod.pipe"
 import { IssuesModule } from "../issues/issues.module"
 import { IssuesService } from "../issues/issues.service"
 import { RoutingModule } from "../routing/routing.service"
+import { DemoController, DemoDirector } from "./demo.service"
+import { DemoService } from "./demo-state.service"
 import { LiveClockService } from "./live-clock.service"
 import { LiveGateway } from "./live.gateway"
 import { LiveService } from "./live.service"
@@ -22,6 +24,7 @@ export class LiveController {
     private readonly clock: LiveClockService,
     private readonly gateway: LiveGateway,
     private readonly issues: IssuesService,
+    private readonly demo: DemoService,
   ) {}
 
   /** Initial state for the page; updates then arrive over the WebSocket. */
@@ -37,6 +40,8 @@ export class LiveController {
 
   @Post("clock")
   async control(@Body(new ZodPipe(clockSchema)) body: z.infer<typeof clockSchema>) {
+    // The replay clock only exists in demo mode; real mode runs on the real time of day.
+    if (!this.demo.isOn()) return this.clock.effective(false)
     const clock = await this.clock.control(body.action, body.value)
     // Restarting the day also withdraws issues that live monitoring raised in the previous run.
     if (body.action === "reset") await this.issues.clearSystem("sim-")
@@ -48,8 +53,8 @@ export class LiveController {
 
 @Module({
   imports: [IssuesModule, RoutingModule],
-  controllers: [LiveController],
-  providers: [LiveService, LiveClockService, LiveGateway],
-  exports: [LiveService, LiveClockService],
+  controllers: [LiveController, DemoController],
+  providers: [LiveService, LiveClockService, LiveGateway, DemoService, DemoDirector],
+  exports: [LiveService, LiveClockService, DemoService],
 })
 export class LiveModule {}

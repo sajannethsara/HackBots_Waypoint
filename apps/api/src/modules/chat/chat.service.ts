@@ -29,7 +29,7 @@ const PAGE = 40
 const MAX_MENTIONS = 10
 /** Trips and orders this far either side of the operating day count as "current". */
 const WINDOW_DAYS = 7
-const HOME: Record<Role, string> = { DISPATCHER: "/dispatcher/inbox", LOADER: "/loader", DRIVER: "/driver", STORE_MANAGER: "/store" }
+const HOME: Record<Role, string> = { DISPATCHER: "/dispatcher/inbox", LOADER: "/loader/inbox", DRIVER: "/driver", STORE_MANAGER: "/store-manager/inbox" }
 
 const personSelect = {
   id: true,

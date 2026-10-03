@@ -25,7 +25,7 @@ import { ChatModule } from "../chat/chat.module"
 import { ChatService } from "../chat/chat.service"
 
 const PAGE = 50
-const HOME: Record<Role, string> = { DISPATCHER: "/dispatcher/issues", LOADER: "/loader", DRIVER: "/driver", STORE_MANAGER: "/store" }
+const HOME: Record<Role, string> = { DISPATCHER: "/dispatcher/issues", LOADER: "/loader/inbox", DRIVER: "/driver", STORE_MANAGER: "/store-manager/inbox" }
 
 const personSelect = { id: true, name: true, role: true, isActive: true, vehicleId: true, outlet: { select: { name: true } } } satisfies Prisma.UserSelect
 

@@ -24,6 +24,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { fmtDate, fmtNum } from "@/lib/format"
 import type { Decision } from "@/lib/types"
+import type { DeferOrderInput } from "@waypoint/shared"
 import { cn } from "@/lib/utils"
 import { useDeferOrder } from "../queries"
 import { outletWindow } from "../shared/window"
@@ -41,8 +42,21 @@ const REASON_ICON: Record<DeferralReason, LucideIcon> = {
   OTHER: MoreHorizontal,
 }
 
-/** Record why an order moves to the next run. Required reason + optional note, audit-logged. */
-export function DeferSheet({ planId, decision, onClose }: { planId: string; decision: Decision | null; onClose: () => void }) {
+/**
+ * Record why an order moves to the next run. Required reason + optional note, audit-logged.
+ * With `onSubmit` the choice is handed back instead of saved (used by the canvas, which saves in one go).
+ */
+export function DeferSheet({
+  planId,
+  decision,
+  onClose,
+  onSubmit,
+}: {
+  planId: string
+  decision: Decision | null
+  onClose: () => void
+  onSubmit?: (input: DeferOrderInput) => void
+}) {
   const defer = useDeferOrder(planId)
   // Mounted with key={orderId}: starts from the reason the engine suggested.
   const [reason, setReason] = useState<DeferralReason | null>(decision?.reason ?? null)
@@ -143,11 +157,14 @@ export function DeferSheet({ planId, decision, onClose }: { planId: string; deci
           <Button
             className="flex-1"
             disabled={!reason || defer.isPending}
-            onClick={() =>
-              decision &&
-              reason &&
-              defer.mutate({ orderId: decision.orderId, reason, note: note || undefined }, { onSuccess: onClose })
-            }
+            onClick={() => {
+              if (!decision || !reason) return
+              const input = { orderId: decision.orderId, reason, note: note || undefined }
+              if (onSubmit) {
+                onSubmit(input)
+                onClose()
+              } else defer.mutate(input, { onSuccess: onClose })
+            }}
           >
             {defer.isPending ? <Spinner /> : <Check data-icon="inline-start" />} Confirm deferral
           </Button>

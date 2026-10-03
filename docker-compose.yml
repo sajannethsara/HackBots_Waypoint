@@ -25,6 +25,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: api
+    # Local convenience: migrate + seed (no-op if already seeded), then serve. Production splits this out.
+    command: ["sh", "-c", "cd /repo/packages/db && ./node_modules/.bin/prisma migrate deploy && node dist/seed/index.js && cd /repo/apps/api && node dist/main.js"]
     restart: unless-stopped
     depends_on:
       db:
@@ -40,6 +42,8 @@ services:
       GPS_PING_SECONDS: ${GPS_PING_SECONDS:-240}
       ARRIVE_RADIUS_M: ${ARRIVE_RADIUS_M:-150}
       DATA_DIR: /repo/data
+    volumes:
+      - ./uploads:/uploads # photos survive container rebuilds and stay visible in git
     ports:
       - "4000:4000"
     healthcheck:

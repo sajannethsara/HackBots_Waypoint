@@ -1,0 +1,12 @@
+# Automatic HTTPS (Let's Encrypt) for SITE_HOST, e.g. waypoint-demo.duckdns.org
+{$SITE_HOST} {
+	encode gzip
+
+	# Live WebSocket goes straight to the API; everything else (incl. /api/*) goes through Next.
+	handle /socket.io/* {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+}

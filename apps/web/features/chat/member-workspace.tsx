@@ -8,12 +8,14 @@ import { useMe } from "@/hooks/use-session"
 import { IssueChatsInbox } from "@/features/issue-chat/issue-chats-inbox"
 import { cn } from "@/lib/utils"
 import { Inbox } from "./inbox"
+import { LoaderGate } from "./loader-gate"
 import { ChatProvider, useUnread } from "./use-chat"
 
 function Shell() {
   const { data: me } = useMe()
   const { data: unread } = useUnread()
-  const [view, setView] = useState<"messages" | "issues">("messages")
+  const [picked, setView] = useState<"messages" | "issues" | "gate" | null>(null)
+  const view = picked ?? (me?.role === "LOADER" ? "gate" : "messages")
   if (!me) return null
   return (
     <SidebarProvider>
@@ -23,15 +25,15 @@ function Shell() {
           <SidebarTrigger />
           <Separator orientation="vertical" className="h-5" />
           <div className="flex gap-1">
-            {(["messages", "issues"] as const).map((v) => (
+            {(me.role === "LOADER" ? (["gate", "messages", "issues"] as const) : (["messages", "issues"] as const)).map((v) => (
               <button key={v} type="button" onClick={() => setView(v)} className={cn("h-8 rounded-lg px-3 text-sm font-medium", view === v ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted")}>
-                {v === "messages" ? "Dispatch messages" : "Issue chats"}
+                {v === "gate" ? "Trips to load" : v === "messages" ? "Dispatch messages" : "Issue chats"}
               </button>
             ))}
           </div>
         </header>
         <div className="mx-auto h-[calc(100svh-3.5rem)] w-full max-w-5xl p-3 md:p-5">
-          <Suspense>{view === "messages" ? <Inbox /> : <IssueChatsInbox />}</Suspense>
+          <Suspense>{view === "gate" ? <LoaderGate /> : view === "messages" ? <Inbox /> : <IssueChatsInbox />}</Suspense>
         </div>
       </SidebarInset>
     </SidebarProvider>

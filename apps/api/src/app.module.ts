@@ -11,12 +11,17 @@ import { DriverModule } from "./modules/driver/driver.module"
 import { HealthModule } from "./modules/health/health.module"
 import { IssueChatModule } from "./modules/issue-chat/issue-chat.module"
 import { IssuesModule } from "./modules/issues/issues.module"
+import { MediaModule } from "./modules/media/media.module"
 import { LiveModule } from "./modules/live/live.module"
+import { LoaderModule } from "./modules/loader/loader.module"
 import { TripsModule } from "./modules/trips/trips.module"
 import { OutletsModule } from "./modules/outlets/outlets.module"
 import { VehiclesModule } from "./modules/vehicles/vehicles.module"
 import { OrdersModule } from "./modules/orders/orders.module"
+import { StoreModule } from "./modules/store-manager/store.module"
 import { PlanningModule } from "./modules/planning/planning.module"
+import { GateModule } from "./modules/planning/gate.module"
+import { ExceptionsModule } from "./modules/planning/exceptions.module"
 import { ReferenceModule } from "./modules/reference/reference.module"
 
 @Module({
@@ -34,14 +39,19 @@ import { ReferenceModule } from "./modules/reference/reference.module"
     DashboardModule,
     OrdersModule,
     PlanningModule,
+    GateModule,
+    ExceptionsModule,
     LiveModule,
     IssuesModule,
     IssueChatModule,
     ChatModule,
     TripsModule,
     DriverModule,
+    LoaderModule,
     VehiclesModule,
     OutletsModule,
+    StoreModule,
+    MediaModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })

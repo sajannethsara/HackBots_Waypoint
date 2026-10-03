@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { Boxes, ClipboardCheck, FileCheck2, Repeat, Route, Scale, Store, Target, Truck } from "lucide-react"
-import { DOCK_LABEL, PARKING_LABEL } from "@waypoint/shared"
+import { Boxes, ClipboardCheck, FileCheck2, PackageX, Repeat, Route, Scale, Store, Target, Truck, Workflow } from "lucide-react"
+import { DEFERRAL_REASON_META, DOCK_LABEL, PARKING_LABEL } from "@waypoint/shared"
 import { BrandBadge, ReasonBadge, StatusBadge, TagBadge, TempIcon } from "@/components/shared/badges"
 import { StatCard } from "@/components/shared/stat-card"
 import { Button } from "@/components/ui/button"
@@ -56,6 +56,8 @@ export function OrderDetailPage({ id, wsUrl }: { id: string; wsUrl?: string }) {
   if (isLoading || !o) return <Skeleton className="h-[700px] rounded-xl" />
 
   const latest = o.decisions[0]
+  // The newest planning decision left this order out: explain what happened and what the dispatcher can do.
+  const deferral = latest?.decision === "DEFERRED" && latest.plan.status !== "SUPERSEDED" ? latest : null
   const manager = o.outlet.managers[0]
   const settled = ["DELIVERED", "RECEIVED", "PARTIAL", "REFUSED"].includes(o.status)
   const status = live?.stop.status === "COMPLETED" && !settled ? "DELIVERED" : o.status
@@ -96,6 +98,59 @@ export function OrderDetailPage({ id, wsUrl }: { id: string; wsUrl?: string }) {
       </div>
 
       {live && <LiveStopBanner trip={live.trip} stop={live.stop} subject="order" />}
+
+      {deferral && (
+        <section className="grid gap-3 rounded-xl border border-amber-600/25 bg-amber-500/[0.06] p-4 dark:border-amber-400/25 dark:bg-amber-400/[0.07]">
+          <div className="flex flex-wrap items-center gap-2">
+            <PackageX className="size-4 text-amber-600 dark:text-amber-400" />
+            <h2 className="text-sm font-semibold">This order was deferred</h2>
+            {deferral.reason && <ReasonBadge reason={deferral.reason} />}
+            {deferral.source === "DISPATCHER" ? (
+              <TagBadge tone="violet">Decided by {deferral.overriddenBy?.name ?? "dispatcher"}</TagBadge>
+            ) : (
+              <TagBadge tone={deferral.scoreBreakdown?.unavoidable === true ? "gray" : "amber"}>
+                {deferral.scoreBreakdown?.unavoidable === true ? "Unavoidable" : "A trade-off"}
+              </TagBadge>
+            )}
+            <span className="ml-auto text-[11px] text-muted-foreground">
+              Plan v{deferral.plan.version} ({deferral.plan.status.toLowerCase()}) · {timeAgo(deferral.createdAt)}
+            </span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="grid gap-1.5 text-sm">
+              <p>{deferral.note || deferral.explanation || "No explanation was recorded."}</p>
+              {deferral.reason && (
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">{DEFERRAL_REASON_META[deferral.reason].label}:</span> {DEFERRAL_REASON_META[deferral.reason].hint}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {deferral.source === "ENGINE" && deferral.scoreBreakdown?.unavoidable === true
+                  ? "No feasible allocation could serve this order today under the operating rules, so waiting for the next run is the only option."
+                  : deferral.source === "ENGINE"
+                    ? "Capacity existed but went to higher-priority orders. Moving this order onto a trip in Planning shows what would break."
+                    : "A dispatcher took this order off its trip. It can be put back from the Deferred orders panel in Planning."}
+              </p>
+              {o.deferCount > 0 && (
+                <p className="text-xs font-medium text-red-600 dark:text-red-400">
+                  Already deferred {o.deferCount}× before. {o.outlet.name} has gone without a delivery on consecutive runs.
+                </p>
+              )}
+            </div>
+            <dl className="grid grid-cols-3 gap-x-5 gap-y-2 md:grid-cols-1">
+              <Fact label="Moves to" value={fmtDate(o.deliveryDate, { weekday: "short", day: "numeric", month: "short" })} />
+              <Fact label="Priority score" value={deferral.priorityScore} />
+              <Fact label="Store told" value={deferral.plan.status === "PUBLISHED" ? "Yes, on publish" : "On publish"} />
+            </dl>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" nativeButton={false} render={<Link href="/dispatcher/planning" />}>
+              <Workflow data-icon="inline-start" /> Open planning
+            </Button>
+            {manager && <MessageButton memberId={manager.id} label="Message store" />}
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard icon={Boxes} label="Units" value={o.units} hint={`${o.lines.length} line${o.lines.length === 1 ? "" : "s"}`} />

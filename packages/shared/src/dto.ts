@@ -35,6 +35,30 @@ export const assignOrderSchema = z.object({
 })
 export type AssignOrderInput = z.infer<typeof assignOrderSchema>
 
+/** Manual trip editing: the full ordered stop list of one trip (preview and save). */
+export const tripLayoutSchema = z.object({
+  tripId: z.string(),
+  orderIds: z.array(z.string()).max(30),
+})
+export type TripLayoutInput = z.infer<typeof tripLayoutSchema>
+
+export const saveLayoutSchema = z.object({
+  trips: z.array(tripLayoutSchema).min(1),
+  /** Orders the dispatcher pulled out of trips while editing, each with the recorded reason. */
+  deferrals: z
+    .array(z.object({ orderId: z.string(), reason: z.enum(DEFERRAL_REASONS), note: z.string().max(500).optional() }))
+    .default([]),
+})
+export type SaveLayoutInput = z.infer<typeof saveLayoutSchema>
+
+export const createTripSchema = z.object({
+  vehicleId: z.string(),
+  brand: z.enum(["FRESH", "STYLE", "TECH"]),
+  districtId: z.string(),
+  orderIds: z.array(z.string()).max(30).default([]),
+})
+export type CreateTripInput = z.infer<typeof createTripSchema>
+
 export const createOrderLineSchema = z.object({
   description: z.string().min(1),
   category: z.string().min(1),

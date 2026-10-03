@@ -106,6 +106,8 @@ export class DriverService {
             label: `${t.vehicle.temp === "REEFER" ? "Reefer" : "Ambient"} ${t.vehicle.type.toLowerCase()}`,
             chilled: t.vehicle.temp === "REEFER",
           },
+          claimedAt: t.driverClaimedAt?.toISOString() ?? null,
+          released: !!t.liveAt || !!t.departedAt,
           departedAt: t.departedAt?.toISOString() ?? null,
           completedAt: t.completedAt?.toISOString() ?? null,
           stops: t.stops.map((s) => {
@@ -278,6 +280,7 @@ export class DriverService {
     const base = { id: ev.id, tripId: trip.id, stopId: stop?.id, driverId: user.sub, type: ev.type, occurredAt: at, deviceId, payload: ev.reason || ev.pod || ev.location ? ({ reason: ev.reason, podId: ev.pod?.id, location: ev.location } as Prisma.InputJsonValue) : undefined } as const
 
     if (ev.type === "TRIP_DEPARTED") {
+      if (!trip.liveAt && !trip.departedAt) return "Dispatch has not released this trip yet"
       await this.db.$transaction([
         this.db.trip.update({ where: { id: trip.id }, data: { status: "DEPARTED", departedAt: trip.departedAt ?? at, driverId: trip.driverId ?? user.sub } }),
         this.db.order.updateMany({ where: { id: { in: trip.stops.map((s) => s.orderId) }, status: { in: ["PLANNED", "LOADED"] } }, data: { status: "IN_TRANSIT" } }),
@@ -340,7 +343,7 @@ export class DriverService {
               type: "DELIVERY_UPDATE",
               title: `${stop!.order.ref} ${ev.type === "DELIVERED" ? "delivered" : ev.type === "PARTIAL" ? "partly delivered" : "refused"}`,
               body: ev.pod ? `Received by ${ev.pod.recipientName}. Please confirm what arrived.` : (ev.reason ?? "Delivery recorded by the driver."),
-              link: "/store",
+              link: `/store-manager/orders/${stop!.orderId}`,
             })),
           }),
         )

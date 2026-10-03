@@ -37,6 +37,16 @@ export class LiveClockService implements OnModuleInit {
     return { minute: Math.round(minute * 10) / 10, running: running && minute < DAY_END, speed }
   }
 
+  /**
+   * The clock the dispatcher sees. In demo mode it is the replay clock above; otherwise it is the real
+   * time of day and nothing is replayed (vehicles move only when drivers report).
+   */
+  effective(demo: boolean): LiveClock {
+    if (demo) return this.now()
+    const d = new Date()
+    return { minute: d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60, running: true, speed: 1 }
+  }
+
   async control(action: "play" | "pause" | "reset" | "seek" | "speed", value?: number): Promise<LiveClock> {
     const current = this.now().minute
     if (action === "play") this.state = { ...this.state, running: true, baseMin: current, baseAt: Date.now() }

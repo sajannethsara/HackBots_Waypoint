@@ -61,3 +61,4 @@ export const postLogout = () => call("/auth/logout", { method: "POST" })
 
 export const fetchIssueChat = (chatId: string) => call<import("@waypoint/shared").IssueChatDetail>(`/issue-chats/${chatId}`, { timeoutMs: 15_000 })
 export const postChatRead = (chatId: string) => call<{ ok: boolean }>(`/issue-chats/${chatId}/read`, { method: "POST", timeoutMs: 8_000 })
+export const postClaim = (tripId: string, on: boolean) => call<{ ok: true }>(`/gate/trips/${tripId}/${on ? "claim" : "unclaim"}`, { method: "POST" })

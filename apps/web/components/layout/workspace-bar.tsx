@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { useAppContext } from "@/hooks/use-session"
 import { useWorkspace } from "@/hooks/use-workspace"
+import { DemoPlayer } from "@/features/dispatcher/demo/demo-player"
 import { fmtDate } from "@/lib/format"
 
 /** Sticky top bar: sidebar toggle, operating day, depot scope and the day's demand drivers. */
@@ -56,7 +57,8 @@ export function WorkspaceBar() {
         )}
         {cal && <span className="text-xs text-muted-foreground">ISO week {cal.isoWeek}</span>}
       </div>
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-1.5">
+        <DemoPlayer />
         <Button variant="ghost" size="icon-sm" aria-label="Notifications">
           <Bell />
         </Button>
