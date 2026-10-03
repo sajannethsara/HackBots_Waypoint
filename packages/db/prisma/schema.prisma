@@ -431,25 +431,27 @@ model User {
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now()) @db.Timestamptz
 
-  ordersCreated     Order[]            @relation("OrderCreatedBy")
-  plansPublished    Plan[]             @relation("PlanPublishedBy")
-  decisionsMade     PlanDecision[]     @relation("DecisionOverriddenBy")
-  tripsLoaded       Trip[]             @relation("TripLoadedBy")
-  tripsClaimed      Trip[]             @relation("TripClaimedBy")
-  linesCounted      LoadLine[]         @relation("LoadLineCountedBy")
-  tripsDriven       Trip[]             @relation("TripDriver")
-  tripsLoading      Trip[]             @relation("TripLoader")
-  deliveryEvents    DeliveryEvent[]
-  locations         DriverLocation[]
-  issueChatMembers  IssueChatMember[]
-  issueChatMessages IssueChatMessage[]
-  issuesReported    Issue[]            @relation("IssueReportedBy")
-  issuesResolved    Issue[]            @relation("IssueResolvedBy")
-  receipts          Receipt[]
-  notifications     Notification[]
-  auditLogs         AuditLog[]
-  conversations     Conversation[]     @relation("ConversationMember")
-  messagesSent      Message[]          @relation("MessageSender")
+  ordersCreated         Order[]               @relation("OrderCreatedBy")
+  plansPublished        Plan[]                @relation("PlanPublishedBy")
+  decisionsMade         PlanDecision[]        @relation("DecisionOverriddenBy")
+  tripsLoaded           Trip[]                @relation("TripLoadedBy")
+  tripsClaimed          Trip[]                @relation("TripClaimedBy")
+  linesCounted          LoadLine[]            @relation("LoadLineCountedBy")
+  tripsDriven           Trip[]                @relation("TripDriver")
+  tripsLoading          Trip[]                @relation("TripLoader")
+  deliveryEvents        DeliveryEvent[]
+  locations             DriverLocation[]
+  issueChatMembers      IssueChatMember[]
+  issueChatMessages     IssueChatMessage[]
+  issuesReported        Issue[]               @relation("IssueReportedBy")
+  issuesResolved        Issue[]               @relation("IssueResolvedBy")
+  receipts              Receipt[]
+  notifications         Notification[]
+  auditLogs             AuditLog[]
+  conversations         Conversation[]        @relation("ConversationMember")
+  messagesSent          Message[]             @relation("MessageSender")
+  changeRequestsMade    OutletChangeRequest[] @relation("ChangeRequestedBy")
+  changeRequestsDecided OutletChangeRequest[] @relation("ChangeDecidedBy")
 }
 
 // ──────────────────────────────── Orders ────────────────────────────────
@@ -501,6 +503,8 @@ model LoadLine {
   countedAt   DateTime  @updatedAt @db.Timestamptz
 
   @@id([stopId, orderLineId])
+}
+
 // What a store can order. Unit weight/volume are calibrated to each brand's real average per unit.
 model Product {
   id           String          @id @default(cuid())
