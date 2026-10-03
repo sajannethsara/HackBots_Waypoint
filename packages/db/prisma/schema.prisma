@@ -450,6 +450,8 @@ model User {
   auditLogs         AuditLog[]
   conversations     Conversation[]     @relation("ConversationMember")
   messagesSent      Message[]          @relation("MessageSender")
+  changeRequestsMade    OutletChangeRequest[] @relation("ChangeRequestedBy")
+  changeRequestsDecided OutletChangeRequest[] @relation("ChangeDecidedBy")
 }
 
 // ──────────────────────────────── Orders ────────────────────────────────
@@ -501,6 +503,8 @@ model LoadLine {
   countedAt   DateTime  @updatedAt @db.Timestamptz
 
   @@id([stopId, orderLineId])
+}
+
 // What a store can order. Unit weight/volume are calibrated to each brand's real average per unit.
 model Product {
   id           String          @id @default(cuid())
