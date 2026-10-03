@@ -34,6 +34,7 @@ import { IssuesModule } from "../issues/issues.module"
 import { LiveModule } from "../live/live.module"
 import { MediaModule } from "../media/media.module"
 import { PlanningModule } from "../planning/planning.module"
+import { StoreLiveService } from "./store-live.service"
 import { StoreOrderingService } from "./store-ordering.service"
 import { StoreReceivingService } from "./store-receiving.service"
 
@@ -228,6 +229,7 @@ export class StoreController {
     private readonly store: StoreService,
     private readonly ordering: StoreOrderingService,
     private readonly receiving: StoreReceivingService,
+    private readonly liveTracking: StoreLiveService,
   ) {}
 
   @Get("dashboard")
@@ -243,6 +245,11 @@ export class StoreController {
   @Get("deliveries")
   deliveries(@CurrentUser() user: SessionUser, @Query(new ZodPipe(storeDeliveriesQuerySchema)) q: StoreDeliveriesQuery) {
     return this.receiving.deliveries(user, q)
+  }
+
+  @Get("orders/:id/live")
+  live(@CurrentUser() user: SessionUser, @Param("id") id: string) {
+    return this.liveTracking.view(user, id)
   }
 
   @Get("orders/:id/receiving")
@@ -306,5 +313,5 @@ export class StoreController {
   }
 }
 
-@Module({ imports: [PlanningModule, IssuesModule, LiveModule, MediaModule], controllers: [StoreController], providers: [StoreService, StoreOrderingService, StoreReceivingService] })
+@Module({ imports: [PlanningModule, IssuesModule, LiveModule, MediaModule], controllers: [StoreController], providers: [StoreService, StoreOrderingService, StoreReceivingService, StoreLiveService] })
 export class StoreModule {}

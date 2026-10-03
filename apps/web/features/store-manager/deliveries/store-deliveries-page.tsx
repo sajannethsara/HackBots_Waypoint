@@ -28,7 +28,7 @@ const TABS: { value: StoreDeliveryTab; label: string }[] = [
   { value: "history", label: "History" },
 ]
 
-export function StoreDeliveriesPage() {
+export function StoreDeliveriesPage({ mapboxToken }: { mapboxToken?: string }) {
   const router = useRouter()
   const params = useSearchParams()
   const tab = (STORE_DELIVERY_TABS.find((t) => t === params.get("tab")) ?? "today") as StoreDeliveryTab
@@ -72,7 +72,7 @@ export function StoreDeliveriesPage() {
         </TabsList>
       </Tabs>
 
-      {onTheWay && <OnTheWayCard d={onTheWay} />}
+      {onTheWay && <OnTheWayCard d={onTheWay} mapboxToken={mapboxToken} />}
 
       <Card size="sm" className="gap-0 py-0">
         <div className="border-b px-4 py-3">

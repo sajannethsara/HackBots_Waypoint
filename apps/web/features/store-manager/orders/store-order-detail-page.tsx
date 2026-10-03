@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useState } from "react"
 import { ArrowLeft, ClipboardCheck, MessageSquare, Pencil, TriangleAlert, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Empty,
   EmptyDescription,
@@ -14,12 +15,13 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useChatSheet } from "@/features/chat/chat-sheet"
 import { fmtDate } from "@/lib/format"
 import { useStoreOrder } from "../queries"
+import { TrackPanel } from "../live/track-panel"
 import { ReportIssueDialog } from "../issues/report-issue-dialog"
 import { LOCKED_STATUSES } from "../shared/order-bits"
 import { CancelOrderDialog } from "./cancel-order-dialog"
 import { OrderHeaderChips, StoreOrderView } from "./store-order-view"
 
-export function StoreOrderDetailPage({ id }: { id: string }) {
+export function StoreOrderDetailPage({ id, mapboxToken }: { id: string; mapboxToken?: string }) {
   const { data: o, isLoading, isError } = useStoreOrder(id)
   const [cancelling, setCancelling] = useState(false)
   const [reporting, setReporting] = useState(false)
@@ -111,6 +113,13 @@ export function StoreOrderDetailPage({ id }: { id: string }) {
           )}
         </div>
       </div>
+      {o.status === "IN_TRANSIT" && (
+        <Card size="sm">
+          <CardContent>
+            <TrackPanel orderId={o.id} mapboxToken={mapboxToken} />
+          </CardContent>
+        </Card>
+      )}
       <StoreOrderView o={o} />
       <ReportIssueDialog order={reporting ? { id: o.id, ref: o.ref } : null} onClose={() => setReporting(false)} />
       <CancelOrderDialog order={cancelling ? { id: o.id, ref: o.ref } : null} onClose={() => setCancelling(false)} />

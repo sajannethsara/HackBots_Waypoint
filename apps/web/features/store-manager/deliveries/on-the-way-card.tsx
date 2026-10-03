@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useChatSheet } from "@/features/chat/chat-sheet"
 import { minToHHMM } from "@/lib/format"
+import { TrackPanel } from "../live/track-panel"
 
 const STEPS = DELIVERY_STAGES.map((s) => ({ key: s, label: DELIVERY_STAGE_LABEL[s] }))
 
@@ -22,7 +23,7 @@ const HEADLINE: Record<string, string> = {
 }
 
 /** The delivery the store is waiting for: vehicle, driver, arrival time, how many stops come first, and a tracker. */
-export function OnTheWayCard({ d }: { d: StoreOnTheWay }) {
+export function OnTheWayCard({ d, mapboxToken }: { d: StoreOnTheWay; mapboxToken?: string }) {
   const { open } = useChatSheet()
   const stage = STEPS.findIndex((s) => s.key === d.stage)
   const late = d.delayMin >= 5
@@ -73,6 +74,8 @@ export function OnTheWayCard({ d }: { d: StoreOnTheWay }) {
         </div>
 
         <Stepper steps={STEPS} current={Math.max(0, stage)} className="px-1" />
+
+        <TrackPanel key={d.orderId} orderId={d.orderId} mapboxToken={mapboxToken} defaultOpen={d.stage === "ON_THE_WAY" || d.stage === "ARRIVED"} />
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
           <p className="text-xs text-muted-foreground">

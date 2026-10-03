@@ -343,3 +343,40 @@ export interface StoreMediaSaved {
   id: string
   sizeBytes: number
 }
+
+// ───────────────────────────── Live tracking ─────────────────────────────
+
+/**
+ * What a store may see of the vehicle bringing its order. Deliberately narrow: this outlet's own stop, the
+ * vehicle, and the road still ahead of it. Other outlets' stops and trips never appear.
+ */
+export interface StoreLiveView {
+  orderId: string
+  orderRef: string
+  stage: DeliveryStage
+  generatedAt: string
+  /** Position comes from the driver app or the running clock, not just a timetable. */
+  live: boolean
+  depot: { name: string; position: { lat: number; lng: number } }
+  destination: { name: string; position: { lat: number; lng: number }; windowOpenMin: number; windowCloseMin: number }
+  vehicle: {
+    id: string
+    label: string
+    position: { lat: number; lng: number }
+    heading: number
+    /** The vehicle has left the depot (otherwise only the depot and destination are drawn). */
+    departed: boolean
+    status: string
+    /** Minutes since the driver's last GPS fix; null when the position is not from a phone. */
+    lastSeenMin: number | null
+    fromDriver: boolean
+    simulatedGps: boolean
+  }
+  etaMin: number
+  delayMin: number
+  stopsBefore: number
+  totalStops: number
+  /** Road still to drive from the vehicle to this outlet. Empty before departure and after arrival. */
+  route: { lat: number; lng: number }[]
+  routeSource: "mapbox" | "straight" | null
+}

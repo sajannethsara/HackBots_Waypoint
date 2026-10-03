@@ -58,7 +58,7 @@ const itemSelect = {
 type ItemSource = Prisma.OrderGetPayload<{ select: typeof itemSelect }>
 
 /** Stage on the road, from the order's own status (the driver app moves it) and whether the driver is at the door. */
-function stageOf(status: string, stopStatus?: string): DeliveryStage | null {
+export function stageOf(status: string, stopStatus?: string): DeliveryStage | null {
   switch (status) {
     case "PLANNED":
       return "PLANNED"
