@@ -14,7 +14,7 @@ import { Stepper } from "./stepper"
  * The step is derived from the latest plan for the day; "Replan" opens Generate again
  * and produces a new version that supersedes the published one on publish.
  */
-export function PlanningPage() {
+export function PlanningPage({ mapboxToken }: { mapboxToken?: string }) {
   const { data: plan, isLoading } = useCurrentPlan()
   // Replan is tied to the plan it started from; a newly generated draft ends it.
   const [replanFrom, setReplanFrom] = useState<string | null>(null)
@@ -37,7 +37,7 @@ export function PlanningPage() {
       ) : step === 1 ? (
         <GenerateStep onCancel={replanning ? () => setReplanning(false) : undefined} />
       ) : step === 2 && plan ? (
-        <ReviewStep plan={plan} />
+        <ReviewStep plan={plan} mapboxToken={mapboxToken} />
       ) : plan ? (
         <PublishedStep plan={plan} onReplan={() => setReplanning(true)} />
       ) : null}

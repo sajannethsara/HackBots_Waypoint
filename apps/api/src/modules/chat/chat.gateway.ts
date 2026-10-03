@@ -41,6 +41,7 @@ export class ChatGateway implements OnGatewayConnection {
     }
   }
 
+  
   /** Deliver to every dispatcher and to each listed user (issue group chats). */
   publishTo(_depotId: string, userIds: string[], event: string, payload: unknown) {
     this.server?.to([DISPATCHERS_ROOM, ...userIds.map(userRoom)]).emit(event, payload)

@@ -48,6 +48,8 @@ export interface OutletLite {
   mallWindowOpenMin?: number | null
   mallWindowCloseMin?: number | null
   lastDeliveredOn?: string | null
+  lat?: number | null
+  lng?: number | null
 }
 
 export interface ResourceUsage {
@@ -167,9 +169,37 @@ export interface Decision {
   }
 }
 
+/** Server-side timing + rule check of a trip in the dispatcher's sequence (nothing saved). */
+export interface TripPreview {
+  tripId: string
+  departMin: number
+  endMin: number
+  durationMin: number
+  km: number
+  fuelL: number
+  loadWeightKg: number
+  loadVolumeM3: number
+  vehicleUsedMin: number
+  budgetMin: number
+  vehicleFuelL: number
+  stops: {
+    orderId: string
+    seq: number
+    arrivalMin: number
+    waitMin: number
+    serviceMin: number
+    windowOpenMin: number
+    windowCloseMin: number
+    atRisk: boolean
+    riskReason: string | null
+  }[]
+  violations: { rule: string; message: string }[]
+}
+
 export interface Plan {
   id: string
   depotId: string
+  depot: { id: string; name: string; lat: number | null; lng: number | null }
   date: string
   version: number
   status: "DRAFT" | "PUBLISHED" | "SUPERSEDED"

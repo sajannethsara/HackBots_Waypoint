@@ -1,11 +1,17 @@
-import { Body, Controller, Delete, Get, Module, Param, Post, Query } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Module, Param, Post, Put, Query } from "@nestjs/common"
 import {
   assignOrderSchema,
+  createTripSchema,
   deferOrderSchema,
   generatePlanSchema,
+  saveLayoutSchema,
+  tripLayoutSchema,
   type AssignOrderInput,
+  type CreateTripInput,
   type DeferOrderInput,
   type GeneratePlanInput,
+  type SaveLayoutInput,
+  type TripLayoutInput,
 } from "@waypoint/shared"
 import { CurrentUser, Roles, type SessionUser } from "../../common/auth"
 import { ZodPipe } from "../../common/zod.pipe"
@@ -55,6 +61,31 @@ export class PlanningController {
   @Post(":id/assign")
   assign(@CurrentUser() user: SessionUser, @Param("id") id: string, @Body(new ZodPipe(assignOrderSchema)) body: AssignOrderInput) {
     return this.planning.assignOrder(user, id, body)
+  }
+
+  @Post(":id/trips/preview")
+  preview(@Param("id") id: string, @Body(new ZodPipe(tripLayoutSchema)) body: TripLayoutInput) {
+    return this.planning.previewTrip(id, body)
+  }
+
+  @Post(":id/trips")
+  createTrip(@CurrentUser() user: SessionUser, @Param("id") id: string, @Body(new ZodPipe(createTripSchema)) body: CreateTripInput) {
+    return this.planning.createTrip(user, id, body)
+  }
+
+  @Post(":id/trips/:tripId/reset")
+  resetTrip(@CurrentUser() user: SessionUser, @Param("id") id: string, @Param("tripId") tripId: string) {
+    return this.planning.resetTrip(user, id, tripId)
+  }
+
+  @Delete(":id/trips/:tripId")
+  removeTrip(@CurrentUser() user: SessionUser, @Param("id") id: string, @Param("tripId") tripId: string) {
+    return this.planning.removeTrip(user, id, tripId)
+  }
+
+  @Put(":id/layout")
+  saveLayout(@CurrentUser() user: SessionUser, @Param("id") id: string, @Body(new ZodPipe(saveLayoutSchema)) body: SaveLayoutInput) {
+    return this.planning.saveLayout(user, id, body)
   }
 
   @Post(":id/publish")
