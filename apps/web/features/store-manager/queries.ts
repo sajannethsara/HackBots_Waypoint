@@ -1,7 +1,7 @@
 "use client"
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import type { CreateStoreOrderInput, StoreDashboard, StoreOrderDetail, StoreOrderRules, StoreOrderSaved, StoreOrdersResponse, StoreProduct, StoreTemp, UpdateStoreOrderInput, CancelStoreOrderInput, StoreDeliveriesResponse, StoreDeliveryTab, StoreReceivingDetail, ReceiveDeliveryInput, StoreReceiptResult, StoreIssueRow, StoreIssueDetail, ReportStoreIssueInput } from "@waypoint/shared"
+import type { CreateStoreOrderInput, StoreDashboard, StoreOrderDetail, StoreOrderRules, StoreOrderSaved, StoreOrdersResponse, StoreProduct, StoreTemp, UpdateStoreOrderInput, CancelStoreOrderInput, StoreDeliveriesResponse, StoreDeliveryTab, StoreReceivingDetail, ReceiveDeliveryInput, StoreReceiptResult, StoreIssueRow, StoreIssueDetail, ReportStoreIssueInput, StoreProfile, UpdateAboutInput, UpdateLeadershipInput, UpdateReceivingInput, ChangeRequestInput, StoreChangeRequest, StoreSettings, NotificationPrefs, StoreNotifications, ChangePasswordInput } from "@waypoint/shared"
 import { api, qs } from "@/lib/api"
 
 /** All store-manager data access: query keys and fetchers. The API scopes every call to the signed-in outlet. */
@@ -134,4 +134,70 @@ export function useStoreIssues(status: "all" | "open" | "resolved") {
 
 export function useStoreIssue(id: string) {
   return useQuery({ queryKey: storeKeys.issue(id), queryFn: () => api<StoreIssueDetail>(`/store/issues/${id}`), refetchInterval: 30_000 })
+}
+
+// ───────────────────────────── Profile, settings, notifications ─────────────────────────────
+
+export function useStoreProfile() {
+  return useQuery({ queryKey: ["store", "profile"] as const, queryFn: () => api<StoreProfile>("/store/profile"), refetchInterval: 60_000 })
+}
+
+/** A section save returns the whole profile, so the page is replaced in one step. */
+function useSaveSection<T>(path: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: T) => api<StoreProfile>(`/store/profile/${path}`, { method: "PUT", json: input }),
+    onSuccess: (profile) => qc.setQueryData(["store", "profile"], profile),
+  })
+}
+export const useSaveAbout = () => useSaveSection<UpdateAboutInput>("about")
+export const useSaveLeadership = () => useSaveSection<UpdateLeadershipInput>("leadership")
+export const useSaveReceiving = () => useSaveSection<UpdateReceivingInput>("receiving")
+
+export function useRequestChange() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ChangeRequestInput) => api<StoreChangeRequest>("/store/profile/change-requests", { method: "POST", json: input }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["store", "profile"] }),
+  })
+}
+
+export function useCancelRequest() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api<StoreChangeRequest>(`/store/profile/change-requests/${id}/cancel`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["store", "profile"] }),
+  })
+}
+
+export function useStoreSettings() {
+  return useQuery({ queryKey: ["store", "settings"] as const, queryFn: () => api<StoreSettings>("/store/settings") })
+}
+
+export function useSavePrefs() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (prefs: NotificationPrefs) => api<StoreSettings>("/store/settings/notifications", { method: "PUT", json: prefs }),
+    // Switching a group off or on changes what the bell shows, so refresh it too.
+    onSuccess: (settings) => {
+      qc.setQueryData(["store", "settings"], settings)
+      qc.invalidateQueries({ queryKey: ["store", "notifications"] })
+    },
+  })
+}
+
+export function useChangePassword() {
+  return useMutation({ mutationFn: (input: ChangePasswordInput) => api<{ ok: true }>("/auth/password", { method: "POST", json: input }) })
+}
+
+export function useStoreNotifications() {
+  return useQuery({ queryKey: ["store", "notifications"] as const, queryFn: () => api<StoreNotifications>("/store/notifications"), refetchInterval: 30_000, refetchOnWindowFocus: true })
+}
+
+export function useMarkNotificationsRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ids?: string[]) => api<{ marked: number }>("/store/notifications/read", { method: "POST", json: { ids } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["store", "notifications"] }),
+  })
 }

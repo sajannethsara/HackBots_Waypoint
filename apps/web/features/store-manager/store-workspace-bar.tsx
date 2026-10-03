@@ -1,13 +1,13 @@
 "use client"
 
-import { Bell, CalendarDays, MapPin, PartyPopper, Wallet } from "lucide-react"
+import { CalendarDays, MapPin, PartyPopper, Wallet } from "lucide-react"
 import { BrandBadge } from "@/components/shared/badges"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { useAppContext, useMe } from "@/hooks/use-session"
 import { fmtDate } from "@/lib/format"
+import { NotificationBell } from "./notifications/notification-bell"
 
 /** Sticky top bar: sidebar toggle, operating day and the outlet this manager is scoped to. */
 export function StoreWorkspaceBar() {
@@ -46,9 +46,7 @@ export function StoreWorkspaceBar() {
         )}
       </div>
       <div className="ml-auto flex items-center gap-1">
-        <Button variant="ghost" size="icon-sm" aria-label="Notifications">
-          <Bell />
-        </Button>
+        <NotificationBell />
       </div>
     </header>
   )

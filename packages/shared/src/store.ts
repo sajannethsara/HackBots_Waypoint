@@ -380,3 +380,170 @@ export interface StoreLiveView {
   route: { lat: number; lng: number }[]
   routeSource: "mapbox" | "straight" | null
 }
+
+// ───────────────────────────── Outlet profile ─────────────────────────────
+
+export interface StoreDepartment {
+  name: string
+  areaM2: number
+}
+export interface StoreLeader {
+  role: string
+  name: string
+  phone: string | null
+  email: string | null
+}
+
+export type StoreChangeKind = "WINDOW" | "ACCESS"
+export type StoreRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
+
+export interface StoreChangeRequest {
+  id: string
+  kind: StoreChangeKind
+  status: StoreRequestStatus
+  /** What it is now / what the store asks for (shape depends on `kind`: window minutes, or dock and parking). */
+  current: Record<string, unknown>
+  proposed: Record<string, unknown>
+  reason: string
+  createdAt: string
+  decidedAt: string | null
+  decisionNote: string | null
+}
+
+export interface StoreProfile {
+  outlet: {
+    id: string
+    name: string
+    brand: Brand
+    district: string
+    depot: { id: string; name: string }
+    dockType: string
+    parkingConstraint: string
+    windowOpenMin: number
+    windowCloseMin: number
+    mallWindowOpenMin: number | null
+    mallWindowCloseMin: number | null
+  }
+  about: {
+    address: string | null
+    phone: string | null
+    email: string | null
+    tradingOpenMin: number | null
+    tradingCloseMin: number | null
+    floorAreaM2: number | null
+  }
+  departments: StoreDepartment[]
+  leadership: StoreLeader[]
+  receiving: {
+    contactName: string | null
+    contactPhone: string | null
+    staff: number | null
+    hasForklift: boolean
+    hasColdRoom: boolean
+    notes: string | null
+  }
+  /** Open requests plus the latest few decided ones. */
+  requests: StoreChangeRequest[]
+}
+
+const minuteOfDay = z.number().int().min(0).max(1439)
+const optionalText = (max: number) => z.string().trim().max(max).optional().transform((v) => v || null)
+
+/** About + departments. Department areas cannot add up to more than the floor area. */
+export const updateAboutSchema = z
+  .object({
+    address: optionalText(200),
+    phone: optionalText(30),
+    email: z.string().trim().email().max(120).optional().or(z.literal("")).transform((v) => v || null),
+    tradingOpenMin: minuteOfDay,
+    tradingCloseMin: minuteOfDay,
+    floorAreaM2: z.number().int().min(10).max(50_000),
+    departments: z.array(z.object({ name: z.string().trim().min(1).max(40), areaM2: z.number().int().min(0).max(50_000) })).max(12),
+  })
+  .refine((v) => v.tradingCloseMin > v.tradingOpenMin, { message: "Closing time must be after opening time", path: ["tradingCloseMin"] })
+  .refine((v) => v.departments.reduce((s, d) => s + d.areaM2, 0) <= v.floorAreaM2, { message: "Departments cannot be larger than the floor area together", path: ["departments"] })
+export type UpdateAboutInput = z.infer<typeof updateAboutSchema>
+
+export const updateLeadershipSchema = z.object({
+  leadership: z
+    .array(
+      z.object({
+        role: z.string().trim().min(1).max(40),
+        name: z.string().trim().min(1).max(60),
+        phone: optionalText(30),
+        email: z.string().trim().email().max(120).optional().or(z.literal("")).transform((v) => v || null),
+      }),
+    )
+    .max(8),
+})
+export type UpdateLeadershipInput = z.infer<typeof updateLeadershipSchema>
+
+export const updateReceivingSchema = z.object({
+  contactName: optionalText(60),
+  contactPhone: optionalText(30),
+  staff: z.number().int().min(0).max(50),
+  hasForklift: z.boolean(),
+  hasColdRoom: z.boolean(),
+  notes: optionalText(500),
+})
+export type UpdateReceivingInput = z.infer<typeof updateReceivingSchema>
+
+/** Things that change how the outlet is planned go to the dispatcher as a request instead of applying directly. */
+export const changeRequestSchema = z.discriminatedUnion("kind", [
+  z
+    .object({ kind: z.literal("WINDOW"), windowOpenMin: minuteOfDay, windowCloseMin: minuteOfDay, reason: z.string().trim().min(5).max(300) })
+    .refine((v) => v.windowCloseMin - v.windowOpenMin >= 60, { message: "The receiving window must be at least one hour", path: ["windowCloseMin"] }),
+  z.object({
+    kind: z.literal("ACCESS"),
+    dockType: z.enum(["REAR_DOCK", "STREET", "MALL_BAY"]),
+    parkingConstraint: z.enum(["NORMAL", "VAN_ONLY", "MALL_DOCK"]),
+    reason: z.string().trim().min(5).max(300),
+  }),
+])
+export type ChangeRequestInput = z.infer<typeof changeRequestSchema>
+
+/** Dispatcher's decision on a store's request. */
+export const decideRequestSchema = z.object({ decision: z.enum(["APPROVED", "REJECTED"]), note: z.string().trim().max(300).optional() })
+export type DecideRequestInput = z.infer<typeof decideRequestSchema>
+
+// ───────────────────────────── Notifications and settings ─────────────────────────────
+
+export const NOTIFICATION_GROUPS = ["orders", "deliveries", "issues", "messages"] as const
+export type NotificationGroup = (typeof NOTIFICATION_GROUPS)[number]
+export type NotificationPrefs = Record<NotificationGroup, boolean>
+
+export const NOTIFICATION_GROUP_META: Record<NotificationGroup, { label: string; description: string; types: string[] }> = {
+  orders: { label: "Orders", description: "When dispatch schedules, defers or changes one of your orders.", types: ["ORDER_CONFIRMED", "ORDER_SCHEDULED", "ORDER_DEFERRED", "ORDER_UPDATED", "OUTLET_REQUEST"] },
+  deliveries: { label: "Deliveries", description: "When a delivery is on its way, arrives or has its time updated.", types: ["DELIVERY_UPDATE", "ETA_UPDATED", "TRIP_UPDATED", "VEHICLE_STATUS", "LATE_ARRIVAL"] },
+  issues: { label: "Issues", description: "Progress and replies on problems you reported.", types: ["ISSUE_UPDATE", "ISSUE_CHAT"] },
+  messages: { label: "Messages", description: "Direct messages from the dispatch desk.", types: ["CHAT_MESSAGE", "DISPATCH_MESSAGE"] },
+}
+
+export const updateNotificationPrefsSchema = z.object({ orders: z.boolean(), deliveries: z.boolean(), issues: z.boolean(), messages: z.boolean() })
+
+export interface StoreSettings {
+  account: { name: string; email: string }
+  notifications: NotificationPrefs
+}
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(200),
+    newPassword: z.string().min(8, "Use at least 8 characters").max(200),
+  })
+  .refine((v) => v.newPassword !== v.currentPassword, { message: "Choose a password you have not used before", path: ["newPassword"] })
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>
+
+export interface StoreNotification {
+  id: string
+  type: string
+  title: string
+  body: string
+  link: string | null
+  readAt: string | null
+  createdAt: string
+}
+export interface StoreNotifications {
+  items: StoreNotification[]
+  unread: number
+}
