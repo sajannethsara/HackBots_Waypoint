@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/core"
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable"
 import dynamic from "next/dynamic"
-import { AlertTriangle, ListOrdered, Map as MapIcon, PackageX, Plus, Save, Search, Send, Snowflake, Trash2 } from "lucide-react"
+import { AlertTriangle, ClipboardList, ListOrdered, Map as MapIcon, Plus, Save, Search, Send, Snowflake, Trash2 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
 import type { Brand, DeferOrderInput } from "@waypoint/shared"
@@ -36,17 +36,26 @@ import { useDiscardPlan, usePublishPlan, useRemoveTrip, useResetTrip, useSaveLay
 import { AddTripDialog } from "./add-trip-dialog"
 import { useCanvas, type PoolItem } from "./canvas"
 import { AssignDialog } from "./assign-dialog"
-import { DeferredQueue } from "./deferred-queue"
 import { DeferredCardView, DeferredRail } from "./deferred-rail"
 import { DeferSheet } from "./defer-sheet"
 import { TripCanvas } from "./trip-canvas"
+import { TripDetails } from "./trip-details"
 
 const TripMap = dynamic(() => import("./trip-map"), { ssr: false, loading: () => <Skeleton className="m-4 flex-1 rounded-xl" /> })
 
 const HEIGHT = "xl:h-[calc(100dvh-16rem)] xl:min-h-[600px]"
 const BRAND_HEX: Record<Brand, string> = { FRESH: "#16a34a", STYLE: "#db2777", TECH: "#0284c7" }
 
-type Tab = "stops" | "map" | "deferred"
+type Tab = "stops" | "map" | "details"
+
+/** Engine order: earliest window close first, then earliest open. */
+function windowOrder(ids: string[], decisions: Map<string, Decision>) {
+  const win = (id: string) => {
+    const o = decisions.get(id)!.order.outlet
+    return [Math.max(o.windowOpenMin ?? 0, o.mallWindowOpenMin ?? 0), Math.min(o.windowCloseMin ?? 1440, o.mallWindowCloseMin ?? 1440)] as const
+  }
+  return ids.toSorted((a, b) => win(a)[1] - win(b)[1] || win(a)[0] - win(b)[0])
+}
 
 /** Pointer position decides the target: a trip card wins, then the deferred rail, then the stop under the pointer. */
 const collision: CollisionDetection = (args) => {
@@ -91,6 +100,7 @@ export function ReviewStep({ plan, mapboxToken }: { plan: Plan; mapboxToken?: st
   const selected = trips.find((t) => t.id === selectedId) ?? visible[0] ?? trips[0]
   const orderIds = selected ? (layout[selected.id] ?? []) : []
   const deferred = plan.decisions.filter((d) => d.decision === "DEFERRED")
+  const optimalOrder = windowOrder(orderIds, decisions)
   const atRiskTrips = trips.filter((t) => t.stops.some((s) => s.atRisk)).length
 
   // Live re-timing: every change to the sequence recalculates after a short pause; the button forces it now.
@@ -228,9 +238,8 @@ export function ReviewStep({ plan, mapboxToken }: { plan: Plan; mapboxToken?: st
                   <TabsTrigger value="map" className="text-xs">
                     <MapIcon /> Route map
                   </TabsTrigger>
-                  <TabsTrigger value="deferred" className="text-xs">
-                    <PackageX /> Deferred
-                    <span className="text-[10px] text-muted-foreground">{pool.length}</span>
+                  <TabsTrigger value="details" className="text-xs">
+                    <ClipboardList /> Details
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -241,7 +250,7 @@ export function ReviewStep({ plan, mapboxToken }: { plan: Plan; mapboxToken?: st
               )}
             </div>
 
-            {!selected && tab !== "deferred" ? (
+            {!selected ? (
               <div className="grid flex-1 place-items-center text-sm text-muted-foreground">No trips in this plan. Add one to start planning.</div>
             ) : tab === "stops" && selected ? (
               <TripCanvas
@@ -257,6 +266,8 @@ export function ReviewStep({ plan, mapboxToken }: { plan: Plan; mapboxToken?: st
                 saving={save.isPending}
                 resetting={reset.isPending}
                 onRecalculate={recalc}
+                optimal={optimalOrder.join() === orderIds.join()}
+                onOptimize={() => selected && canvas.reorder(selected.id, optimalOrder)}
                 onDefer={(d) => setDeferring({ decision: d, local: true })}
                 onSave={() => persist([selected.id])}
                 onRevert={() => canvas.revert(selected.id)}
@@ -281,7 +292,7 @@ export function ReviewStep({ plan, mapboxToken }: { plan: Plan; mapboxToken?: st
                 <div className="grid flex-1 place-items-center p-6 text-center text-sm text-muted-foreground">Set MAPBOX_ACCESS_TOKEN to show the route map.</div>
               )
             ) : (
-              <DeferredQueue deferred={deferred} onAssign={setAssigning} onDefer={(d) => setDeferring({ decision: d, local: false })} />
+              <TripDetails trip={selected} preview={preview.data} stops={orderIds.length} />
             )}
           </Card>
 
@@ -412,7 +423,7 @@ function TripCard({ trip, count, dirty, active, onClick }: { trip: Trip; count: 
       onClick={onClick}
       className={cn(
         "grid gap-1.5 rounded-lg border bg-card p-2.5 text-left transition-colors hover:border-primary/40",
-        active && "border-primary ring-1 ring-primary",
+        active && "border-emerald-600/25 bg-emerald-500/[0.07] shadow-xs dark:border-emerald-400/25 dark:bg-emerald-400/[0.08]",
         isOver && "border-primary bg-primary/5 ring-2 ring-primary",
       )}
     >

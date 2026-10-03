@@ -76,6 +76,8 @@ export function useCanvas(plan: Plan) {
     })
   }, [])
 
+  const reorder = useCallback((tripId: string, ids: string[]) => setLayout((l) => ({ ...l, [tripId]: ids })), [])
+
   /** Put an order on a trip (from the pool, or from another trip), at `index` or the end. */
   const place = useCallback((orderId: string, tripId: string, index?: number) => {
     setLayout((l) => {
@@ -107,7 +109,7 @@ export function useCanvas(plan: Plan) {
     [server],
   )
 
-  return { layout, server, defers, pool, decisions, dirtyTrips, pendingDefers, move, place, remove, revert }
+  return { layout, server, defers, pool, decisions, dirtyTrips, pendingDefers, move, reorder, place, remove, revert }
 }
 
 function reconcileOne(l: Layout, server: Layout, tripId: string): Layout {

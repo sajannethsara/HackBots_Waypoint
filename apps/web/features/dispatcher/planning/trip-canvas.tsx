@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowDownToLine,
   Calculator,
+  Wand2,
   CheckCircle2,
   Clock,
   Fuel,
@@ -25,6 +26,7 @@ import { useState } from "react"
 import { TempIcon, TONE, BrandBadge, TagBadge } from "@/components/shared/badges"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
@@ -127,7 +129,7 @@ function RiskChip({ risks }: { risks: Risk[] }) {
 
 // ── meters ─────────────────────────────────────────────────────────────────
 
-function Meter({ icon: Icon, label, value, max, unit, digits = 0, hint }: { icon: typeof Clock; label: string; value: number; max: number; unit: string; digits?: number; hint?: string }) {
+export function Meter({ icon: Icon, label, value, max, unit, digits = 0, hint }: { icon: typeof Clock; label: string; value: number; max: number; unit: string; digits?: number; hint?: string }) {
   const p = pct(value, max)
   return (
     <div className="grid gap-1" title={hint}>
@@ -271,6 +273,8 @@ export interface TripCanvasProps {
   saving: boolean
   resetting: boolean
   onRecalculate: () => void
+  onOptimize: () => void
+  optimal: boolean
   onDefer: (d: Decision) => void
   onSave: () => void
   onRevert: () => void
@@ -301,10 +305,19 @@ export function TripCanvas(p: TripCanvasProps) {
           {trip.districtId} · {trip.vehicleId} · {trip.driver?.name ?? trip.vehicle.driver?.name ?? "driver on publish"}
         </span>
         <div className="ml-auto flex items-center gap-2">
-          <span className="hidden text-xs text-muted-foreground xl:inline">Loader loads in reverse stop order</span>
-          <Button variant="outline" size="xs" onClick={p.onRecalculate} disabled={p.recalculating}>
-            {p.recalculating ? <Spinner /> : <Calculator data-icon="inline-start" />} Calculate arrival times
-          </Button>
+          {/* <span className="hidden text-xs text-muted-foreground xl:inline">Loader loads in reverse stop order</span> */}
+          <Tooltip>
+            <TooltipTrigger render={<Button variant="outline" size="icon-xs" onClick={p.onRecalculate} disabled={p.recalculating} aria-label="Recalculate arrival times" />}>
+              {p.recalculating ? <Spinner /> : <Calculator />}
+            </TooltipTrigger>
+            <TooltipContent>Arrival times update automatically. Click to recalculate now.</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger render={<Button variant="outline" size="xs" onClick={p.onOptimize} disabled={p.optimal || orderIds.length < 2} />}>
+              <Wand2 data-icon="inline-start" /> Optimise order
+            </TooltipTrigger>
+            <TooltipContent>{p.optimal ? "Already in the best window order" : "Re-order stops by delivery window (earliest close first)"}</TooltipContent>
+          </Tooltip>
         </div>
       </div>
 
