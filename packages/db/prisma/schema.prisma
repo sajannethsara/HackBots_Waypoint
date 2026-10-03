@@ -159,6 +159,8 @@ enum IssueType {
   LOAD_MISSING
   LOAD_DAMAGED
   CAPACITY_BREACH
+  SEQUENCE_ISSUE
+  DEPARTURE_DELAY
   LATE_ARRIVAL
   DELIVERY_REFUSED
   OUTLET_CLOSED
@@ -368,6 +370,7 @@ model User {
   plansPublished    Plan[]             @relation("PlanPublishedBy")
   decisionsMade     PlanDecision[]     @relation("DecisionOverriddenBy")
   tripsLoaded       Trip[]             @relation("TripLoadedBy")
+  tripsClaimed      Trip[]             @relation("TripClaimedBy")
   tripsDriven       Trip[]             @relation("TripDriver")
   deliveryEvents    DeliveryEvent[]
   locations         DriverLocation[]
@@ -495,6 +498,9 @@ model Trip {
   loadedAt           DateTime?         @db.Timestamptz
   loadedById         String?
   loadedBy           User?             @relation("TripLoadedBy", fields: [loadedById], references: [id])
+  claimedById        String?
+  claimedBy          User?             @relation("TripClaimedBy", fields: [claimedById], references: [id])
+  claimedAt          DateTime?         @db.Timestamptz
   driverId           String?
   /// Road geometry from Google Routes: { source, legs: [[lat,lng]...][], km, min, computedAt }
   route              Json?
