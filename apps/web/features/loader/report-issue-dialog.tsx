@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { toast } from "sonner"
 import { ArrowDownUp, Clock, PackageMinus, PackageX, Send, TriangleAlert, Truck, type LucideIcon } from "lucide-react"
@@ -15,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { fmtNum } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { loadingOrder } from "./model"
-import { sentMessage, useReportIssue } from "./queries"
+import { issuesHref, sentMessage, useReportIssue } from "./queries"
 import { TOUCH, TOUCH_MENU } from "./touch"
 
 type Kind = Exclude<LoaderIssueInput["kind"], "capacity">
@@ -46,25 +47,29 @@ interface AffectedLine {
 export function ReportIssueDialog({
   trip,
   stopId: initialStopId,
+  lineId,
   open,
   onOpenChange,
 }: {
   trip: LoaderTrip
   /** Pre-select the order when opened from a stop in the loading sequence. */
   stopId?: string
+  /** Pre-tick one item (opened from that item's Report button). */
+  lineId?: string
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
   const [kind, setKind] = useState<Kind>("missing")
   const [stopId, setStopId] = useState(initialStopId ?? "")
-  const [picked, setPicked] = useState<Record<string, boolean>>({})
-  const [counts, setCounts] = useState<Counts>({})
+  const [picked, setPicked] = useState<Record<string, boolean>>(lineId ? { [lineId]: true } : {})
+  const [counts, setCounts] = useState<Counts>(lineId ? { [lineId]: "1" } : {})
   const [delayMin, setDelayMin] = useState("")
   const [delayReason, setDelayReason] = useState(DELAY_REASONS[0])
   const [notes, setNotes] = useState("")
   // One id per report: resubmitting after a network error cannot raise the same issues twice; a new one after each send.
   const [clientId, setClientId] = useState(() => crypto.randomUUID())
   const report = useReportIssue(trip.id)
+  const router = useRouter()
 
   const sequence = loadingOrder(trip.stops)
   const stop = trip.stops.find((s) => s.id === stopId)
@@ -99,7 +104,8 @@ export function ReportIssueDialog({
       },
       {
         onSuccess: (r) => {
-          toast.success(sentMessage(r), { description: "Dispatch has been notified and an issue chat is open in your inbox." })
+          toast.success(sentMessage(r))
+          router.push(issuesHref(r.issues.map((i) => i.id), trip.id, true))
           setClientId(crypto.randomUUID())
           setPicked({})
           setCounts({})

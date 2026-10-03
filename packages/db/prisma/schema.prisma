@@ -371,6 +371,7 @@ model User {
   decisionsMade     PlanDecision[]     @relation("DecisionOverriddenBy")
   tripsLoaded       Trip[]             @relation("TripLoadedBy")
   tripsClaimed      Trip[]             @relation("TripClaimedBy")
+  linesCounted      LoadLine[]         @relation("LoadLineCountedBy")
   tripsDriven       Trip[]             @relation("TripDriver")
   deliveryEvents    DeliveryEvent[]
   locations         DriverLocation[]
@@ -419,6 +420,22 @@ model Order {
   @@index([outletId, deliveryDate])
 }
 
+// The loader's item checklist: units counted onto the truck per order line of a stop.
+// Missing = ordered - loaded - damaged. Keyed by stop, so a re-planned order starts a fresh count.
+model LoadLine {
+  stopId      String
+  stop        Stop      @relation(fields: [stopId], references: [id], onDelete: Cascade)
+  orderLineId String
+  orderLine   OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  loadedQty   Int // good units on the truck
+  damagedQty  Int       @default(0)
+  countedById String
+  countedBy   User      @relation("LoadLineCountedBy", fields: [countedById], references: [id])
+  countedAt   DateTime  @updatedAt @db.Timestamptz
+
+  @@id([stopId, orderLineId])
+}
+
 model OrderLine {
   id            String         @id @default(cuid())
   orderId       String
@@ -430,6 +447,7 @@ model OrderLine {
   volumeM3      Float
   deliveryLines DeliveryLine[]
   issues        Issue[]
+  loadLines     LoadLine[]
 }
 
 // ─────────────────────────────── Planning ───────────────────────────────
@@ -540,6 +558,7 @@ model Stop {
   proof             ProofOfDelivery?
   events            DeliveryEvent[]
   issues            Issue[]
+  loadLines         LoadLine[]
 
   @@unique([tripId, seq])
   @@index([orderId])

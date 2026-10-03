@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { Box, CircleAlert, Package, Send, Weight } from "lucide-react"
 import { toast } from "sonner"
@@ -10,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { fmtNum } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { sentMessage, useReportIssue } from "./queries"
+import { issuesHref, sentMessage, useReportIssue } from "./queries"
 import { TOUCH } from "./touch"
 
 
@@ -39,6 +40,7 @@ export function CapacityBreachModal({
   const [resolution, setResolution] = useState<CapacityResolution>("hold")
   const [clientId, setClientId] = useState(() => crypto.randomUUID())
   const report = useReportIssue(tripId)
+  const router = useRouter()
 
   const send = () =>
     stop &&
@@ -51,6 +53,7 @@ export function CapacityBreachModal({
           })
           setClientId(crypto.randomUUID())
           onOpenChange(false)
+          router.push(issuesHref(r.issues.map((i) => i.id), tripId, true))
         },
         onError: (err) => toast.error(err.message),
       },

@@ -8,7 +8,7 @@ import type { LoaderTrip } from "@waypoint/shared"
 import { Button } from "@/components/ui/button"
 import { ApiError } from "@/lib/api"
 import { canUnclaim, isFlagged, type ClaimState } from "./model"
-import { useClaimTrip, useUnclaimTrip } from "./queries"
+import { issuesHref, useClaimTrip, useUnclaimTrip } from "./queries"
 
 export const tripHref = (trip: LoaderTrip) => (trip.status === "LOADED" ? `/loader/vehicles/${trip.id}/released` : `/loader/vehicles/${trip.id}`)
 
@@ -42,7 +42,7 @@ export function TripActions({ trip, state, showUnclaim = true }: { trip: LoaderT
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
       {isFlagged(trip) && (
-        <Button variant="destructive" size="sm" nativeButton={false} render={<Link href="/loader/inbox?view=issues" />}>
+        <Button variant="destructive" size="sm" nativeButton={false} render={<Link href={issuesHref(trip.issues.map((i) => i.id), trip.id)} />}>
           <TriangleAlert /> View issue
         </Button>
       )}

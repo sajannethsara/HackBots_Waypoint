@@ -1,7 +1,18 @@
 "use client"
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import type { LoaderCapacityBreach, LoaderCompleteBlocked, LoaderIssueInput, LoaderIssueResult, LoaderQueueFilter, LoaderTrip } from "@waypoint/shared"
+import type {
+  LoaderCapacityBreach,
+  LoaderCompleteBlocked,
+  LoaderIssueDetail,
+  LoaderIssueInput,
+  LoaderIssueResult,
+  LoaderQueueFilter,
+  LoaderTrip,
+  StopCountInput,
+  StopCountResult,
+  StopLineResult,
+} from "@waypoint/shared"
 import { api, ApiError } from "@/lib/api"
 
 /** All loader data access in one place: query keys, fetchers and mutations. */
@@ -21,7 +32,8 @@ export function useLoaderQueue(filter: LoaderQueueFilter) {
 }
 
 export function useLoaderTrip(id: string) {
-  return useQuery({ queryKey: loaderKeys.trip(id), queryFn: () => api<LoaderTrip>(`/loader/trips/${id}`), retry: false })
+  // Polled: dispatch can defer a stop, cancel the trip or re-publish the day while the loader works on it.
+  return useQuery({ queryKey: loaderKeys.trip(id), queryFn: () => api<LoaderTrip>(`/loader/trips/${id}`), retry: false, refetchInterval: 15_000 })
 }
 
 /** Put a trip the server just returned into its detail cache, and refresh every queue list. */
@@ -106,4 +118,40 @@ export function confirmFailure(err: unknown): ConfirmFailure {
     if (err.status === 409 || err.status === 403) return { kind: "inactive", message: err.message }
   }
   return { kind: "error", message: err instanceof Error ? err.message : "Could not confirm this stop" }
+}
+
+/** Issues read back for the status screen; polled so "awaiting decision" turns into the dispatcher's answer. */
+export function useLoaderIssues(ids: string[]) {
+  return useQuery({
+    queryKey: ["loader", "issues", ids] as const,
+    queryFn: () => api<LoaderIssueDetail[]>(`/loader/issues?ids=${ids.join(",")}`),
+    enabled: ids.length > 0,
+    refetchInterval: 10_000,
+  })
+}
+
+/** Where to see what happened to issues: the confirmation screen right after sending, the status screen later. */
+export const issuesHref = (ids: string[], tripId?: string, sent = false) =>
+  `/loader/issues?ids=${ids.join(",")}${tripId ? `&trip=${tripId}` : ""}${sent ? "&sent=1" : ""}`
+
+/** Save a stop's item checklist (raises shortfall issues and stows the stop server-side). */
+export function useCountStop(tripId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ stopId, input }: { stopId: string; input: StopCountInput }) =>
+      api<StopCountResult>(`/loader/stops/${stopId}/count`, { method: "POST", json: input }),
+    onSettled: () =>
+      Promise.all([qc.invalidateQueries({ queryKey: loaderKeys.trip(tripId) }), qc.invalidateQueries({ queryKey: ["loader", "queue"] })]),
+  })
+}
+
+/** Tick or untick one item as fully loaded; the API stows the stop when the last item is ticked. */
+export function useMarkLine(tripId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ stopId, lineId, loaded }: { stopId: string; lineId: string; loaded: boolean }) =>
+      api<StopLineResult>(`/loader/stops/${stopId}/lines/${lineId}`, { method: "POST", json: { loaded } }),
+    onSettled: () =>
+      Promise.all([qc.invalidateQueries({ queryKey: loaderKeys.trip(tripId) }), qc.invalidateQueries({ queryKey: ["loader", "queue"] })]),
+  })
 }

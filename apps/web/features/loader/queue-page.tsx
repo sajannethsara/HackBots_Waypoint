@@ -10,11 +10,14 @@ import { Card } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useMe } from "@/hooks/use-session"
 import { fmtKg, fmtM3 } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { cargoSpec, claimState, destination, isFlagged, statusPill, stowedLoad, type ClaimState } from "./model"
+import { useQueueTabPref } from "./prefs"
+import { TOUCH_MENU } from "./touch"
 import { useLoaderQueue } from "./queries"
 import { TripActions } from "./trip-actions"
 
@@ -33,7 +36,9 @@ export function LoaderQueuePage() {
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
-  const tab = (TABS.find((t) => t.id === params.get("tab"))?.id ?? "all") as Tab
+  // The URL wins (links and the sidebar name a tab); otherwise the tab chosen in Settings.
+  const [defaultTab] = useQueueTabPref()
+  const tab = (TABS.find((t) => t.id === params.get("tab"))?.id ?? defaultTab) as Tab
   const [q, setQ] = useState("")
   const { data: me } = useMe()
 
@@ -59,7 +64,7 @@ export function LoaderQueuePage() {
     return list
   }, [filtered.data, tab, q, me?.id])
 
-  const setTab = (t: Tab) => router.replace(t === "all" ? pathname : `${pathname}?tab=${t}`, { scroll: false })
+  const setTab = (t: Tab) => router.replace(t === defaultTab ? pathname : `${pathname}?tab=${t}`, { scroll: false })
 
   return (
     // Two columns only when the content area (not the screen) has room: a landscape tablet with the sidebar open gets one.
@@ -67,7 +72,25 @@ export function LoaderQueuePage() {
       <PageHeader title="Loading Queue" description="Vehicles on today's published plan at your depot, ready for loading and dock staging." />
 
       <Card className="flex-row flex-wrap items-center gap-3 px-3 py-2">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+        {/* Narrow screens: one dropdown instead of five tabs that would overflow. */}
+        <Select value={tab} onValueChange={(v) => setTab(v as Tab)}>
+          <SelectTrigger className="w-full @2xl:hidden" aria-label="Show vehicles">
+            <SelectValue>
+              {(v: Tab) => `Show: ${TABS.find((t) => t.id === v)?.label ?? ""}${all.data ? ` (${counts[v]})` : ""}`}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent className={TOUCH_MENU}>
+            {TABS.map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                {t.label}
+                <span className={cn("ml-auto text-xs tabular-nums", t.id === "flagged" && counts.flagged > 0 ? "text-destructive" : "text-muted-foreground")}>
+                  {all.data ? counts[t.id] : "·"}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="hidden @2xl:flex">
           <TabsList>
             {TABS.map((t) => (
               <TabsTrigger key={t.id} value={t.id} className={cn("gap-1.5 px-2.5", t.id === "flagged" && counts.flagged > 0 && "text-destructive")}>
@@ -79,7 +102,7 @@ export function LoaderQueuePage() {
             ))}
           </TabsList>
         </Tabs>
-        <div className="relative ml-auto w-full sm:w-72">
+        <div className="relative ml-auto w-full @2xl:w-72">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search vehicle ID or destination…" className="h-8 pl-8" />
         </div>

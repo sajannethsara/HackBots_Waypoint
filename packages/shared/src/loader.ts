@@ -5,7 +5,8 @@ import type { IssueSeverity, IssueStatus, IssueType } from "./issues"
 
 /** Loader workspace: the loading bay's queue and one vehicle's load list. Built by the API, read by the web app. */
 
-export const LOADER_QUEUE_FILTERS = ["all", "unclaimed", "mine", "flagged"] as const
+/** `loaded` = trips the current loader finished (released), whatever happened to them since. */
+export const LOADER_QUEUE_FILTERS = ["all", "unclaimed", "mine", "flagged", "loaded"] as const
 export type LoaderQueueFilter = (typeof LOADER_QUEUE_FILTERS)[number]
 
 export type LoadStatus = "PENDING" | "STOWED" | "FLAGGED"
@@ -22,7 +23,16 @@ export interface LoaderStop {
     units: number
     weightKg: number
     volumeM3: number
-    lines: { id: string; description: string; category: string; quantity: number; weightKg: number; volumeM3: number }[]
+    lines: {
+      id: string
+      description: string
+      category: string
+      quantity: number
+      weightKg: number
+      volumeM3: number
+      /** The loader's item count for this stop, once the checklist has been saved. Missing = quantity - loaded - damaged. */
+      count: { loadedQty: number; damagedQty: number; countedAt: string } | null
+    }[]
   }
   outlet: { id: string; name: string; windowOpenMin: number; windowCloseMin: number }
 }
@@ -37,6 +47,8 @@ export interface LoaderIssue {
   description: string
   /** The stop it concerns, if any: a flagged stop does not block finishing the trip. */
   stopId: string | null
+  /** The order line (item) it concerns, if it is about one item. */
+  orderLineId: string | null
 }
 
 export interface LoaderTrip {
@@ -48,6 +60,8 @@ export interface LoaderTrip {
   plannedDepartMin: number
   loadWeightKg: number
   loadVolumeM3: number
+  /** The plan this trip belongs to. Only trips of the depot's current PUBLISHED plan can be loaded. */
+  plan: { status: "DRAFT" | "PUBLISHED" | "SUPERSEDED"; version: number }
   claimedBy: { id: string; name: string } | null
   claimedAt: string | null
   /** Set when the loader finishes loading (status LOADED). */
@@ -115,4 +129,64 @@ export type LoaderIssueRequest = z.output<typeof loaderIssueSchema>
 /** What the API answers: the issues it raised (one per item for missing/damaged). */
 export interface LoaderIssueResult {
   issues: { id: string; ref: string; type: IssueType; description: string }[]
+}
+
+// ───────────────────────────── Item checklist (count a stop's order lines) ─────────────────────────────
+
+/**
+ * The loader's count of one stop, every order line exactly once. The API saves it, raises a missing
+ * and/or damaged issue for any shortfall, and stows the stop if anything good went on the truck.
+ */
+export const stopCountSchema = z.object({
+  /** One per submission, so a retry never raises the same issues twice. */
+  clientId: z.string().min(8).max(64),
+  lines: z
+    .array(z.object({ orderLineId: z.string().min(1), loadedQty: z.number().int().min(0), damagedQty: z.number().int().min(0) }))
+    .min(1)
+    .max(50),
+  notes: z.string().max(500).optional(),
+})
+export type StopCountInput = z.input<typeof stopCountSchema>
+export type StopCountRequest = z.output<typeof stopCountSchema>
+
+export interface StopCountResult {
+  stop: { id: string; loadStatus: LoadStatus }
+  /** Issues raised for shortfalls (none when every unit was loaded in good condition). */
+  issues: LoaderIssueResult["issues"]
+  /** Set when stowing would overload the vehicle: the count and issues are saved, the stop is not stowed. */
+  breach: LoaderCapacityBreach | null
+}
+
+// ───────────────────────────── Reading back raised issues (confirmation screen) ─────────────────────────────
+
+export interface LoaderIssueDetail {
+  id: string
+  ref: string
+  type: IssueType
+  severity: IssueSeverity
+  status: IssueStatus
+  description: string
+  quantity: number | null
+  createdAt: string
+  resolution: string | null
+  resolvedAt: string | null
+  reportedBy: { name: string }
+  trip: { id: string; ref: string; vehicleId: string } | null
+  order: { ref: string } | null
+  outlet: { name: string } | null
+  orderLine: { description: string } | null
+  /** The issue's group chat with dispatch, once it has been opened. */
+  chatId: string | null
+}
+
+// ───────────────────────────── Marking one item loaded (item by item on the load list) ─────────────────────────────
+
+/** Tick (or untick) one item as fully loaded in good condition. Ticking the last item stows the stop. */
+export const stopLineSchema = z.object({ loaded: z.boolean() })
+export type StopLineInput = z.infer<typeof stopLineSchema>
+
+export interface StopLineResult {
+  stop: { id: string; loadStatus: LoadStatus }
+  /** Set when the last tick tried to stow the stop and the vehicle would overload: the tick is saved, the stop is not stowed. */
+  breach: LoaderCapacityBreach | null
 }

@@ -37,7 +37,7 @@ export function ReleasedPage({ tripId }: { tripId: string }) {
           <AlertTitle>{trip.vehicle.id} has not been released yet</AlertTitle>
           <AlertDescription>
             <p>Finish loading from the load list first.</p>
-            <Button variant="outline" size="sm" className="mt-2" render={<Link href={`/loader/vehicles/${trip.id}`} />}>
+            <Button variant="outline" size="sm" className="mt-2" nativeButton={false} render={<Link href={`/loader/vehicles/${trip.id}`} />}>
               <ArrowLeft /> Back to load list
             </Button>
           </AlertDescription>
@@ -119,7 +119,7 @@ function Receipt({ trip, loadedAt, depotName }: { trip: LoaderTrip; loadedAt: st
         <span className="text-xs tabular-nums">{fmtDateTime(loadedAt)}</span>
       </div>
 
-      <Button size="lg" render={<Link href="/loader/queue" />}>
+      <Button size="lg" nativeButton={false} render={<Link href="/loader/queue" />}>
         Return to Loading Queue <ArrowRight />
       </Button>
     </Card>

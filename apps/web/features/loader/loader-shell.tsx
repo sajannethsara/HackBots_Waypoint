@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useEffect } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import { Bell, CalendarDays, MapPin } from "lucide-react"
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { HOME } from "@/components/layout/nav"
@@ -34,7 +34,8 @@ function LoaderBar() {
         <CalendarDays className="size-3.5 text-muted-foreground" />
         <span className="font-medium tabular-nums">{ctx?.operatingDate ? fmtDate(ctx.operatingDate) : "—"}</span>
       </div>
-      <div className="flex h-7 items-center gap-2 rounded-md border px-2.5 text-sm">
+      {/* Phones: the depot is on the dashboard and in Settings; the bar keeps just the day. */}
+      <div className="hidden h-7 items-center gap-2 rounded-md border px-2.5 text-sm sm:flex">
         <MapPin className="size-3.5 text-muted-foreground" />
         <span className="font-medium">{me?.depot?.name ?? "—"}</span>
       </div>
@@ -47,11 +48,23 @@ function LoaderBar() {
   )
 }
 
+/** Wide screens start with the sidebar open; tablets start with it collapsed to icons so the load list gets the room. */
+const WIDE = "(min-width: 1280px)"
+function subscribeWide(cb: () => void) {
+  const mql = window.matchMedia(WIDE)
+  mql.addEventListener("change", cb)
+  return () => mql.removeEventListener("change", cb)
+}
+const useWideScreen = () => useSyncExternalStore(subscribeWide, () => window.matchMedia(WIDE).matches, () => true)
+
 export function LoaderShell({ wsUrl, children }: { wsUrl?: string; children: React.ReactNode }) {
   const router = useRouter()
   const { data: me } = useMe()
   // Signed in as another role (the proxy only checks for a session): send them to their own workspace.
   const otherRole = !!me && me.role !== "LOADER"
+  const wide = useWideScreen()
+  // null until the loader toggles it themselves; after that their choice wins over the screen width.
+  const [sidebarOpen, setSidebarOpen] = useState<boolean | null>(null)
   useEffect(() => {
     if (me && me.role !== "LOADER") router.replace(HOME[me.role])
   }, [me, router])
@@ -59,7 +72,7 @@ export function LoaderShell({ wsUrl, children }: { wsUrl?: string; children: Rea
 
   return (
     <ChatProvider wsUrl={wsUrl}>
-      <SidebarProvider>
+      <SidebarProvider open={sidebarOpen ?? wide} onOpenChange={setSidebarOpen}>
         <LoaderSidebar />
         <SidebarInset className="min-w-0 bg-muted/30">
           <LoaderBar />
