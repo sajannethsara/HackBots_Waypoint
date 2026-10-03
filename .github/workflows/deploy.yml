@@ -68,11 +68,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Prepare SSH
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
           install -m 700 -d ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -T 10 -H "$HOST" >> ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts || { echo "Cannot reach $HOST:22 - check the EC2 security group allows SSH from GitHub runners" >&2; exit 1; }
 
       - name: Sync compose files
         run: scp -i ~/.ssh/deploy_key docker-compose.prod.yml Caddyfile "$SSH_USER@$HOST":/opt/waypoint/
