@@ -1,7 +1,6 @@
-import { MemberWorkspace } from "@/features/chat/member-workspace"
+import { redirect } from "next/navigation"
 
-export const dynamic = "force-dynamic"
-
+/** The loader's home is the loading queue. */
 export default function Page() {
-  return <MemberWorkspace wsUrl={process.env.PUBLIC_WS_URL || undefined} />
+  redirect("/loader/queue")
 }

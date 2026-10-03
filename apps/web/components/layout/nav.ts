@@ -1,7 +1,9 @@
 import {
   AlertTriangle,
+  Archive,
   BarChart3,
   CircleAlert,
+  CircleCheck,
   ClipboardList,
   Gauge,
   LayoutDashboard,
@@ -19,7 +21,7 @@ export interface NavItem {
   title: string
   href: string
   icon: LucideIcon
-  badgeKey?: "exceptions" | "issues" | "inbox"
+  badgeKey?: "exceptions" | "issues" | "inbox" | "flagged"
   soon?: boolean
 }
 export interface NavGroup {
@@ -68,7 +70,17 @@ export const NAV: Record<Role, NavGroup[]> = {
       ],
     },
   ],
-  LOADER: [{ label: "Dock", items: [{ title: "Inbox", href: "/loader", icon: MessagesSquare, badgeKey: "inbox" }] }],
+  LOADER: [
+    {
+      label: "Loading",
+      items: [
+        { title: "Dashboard", href: "/loader/dashboard", icon: LayoutDashboard, soon: true },
+        { title: "Loading Queue", href: "/loader/queue", icon: Archive, badgeKey: "flagged" },
+        { title: "My Loaded Vehicles", href: "/loader/loaded", icon: CircleCheck, soon: true },
+      ],
+    },
+    { label: "Dock", items: [{ title: "Inbox", href: "/loader/inbox", icon: MessagesSquare, badgeKey: "inbox" }] },
+  ],
   DRIVER: [{ label: "Road", items: [{ title: "Inbox", href: "/driver", icon: MessagesSquare, badgeKey: "inbox" }] }],
   STORE_MANAGER: [{ label: "Outlet", items: [{ title: "Inbox", href: "/store", icon: MessagesSquare, badgeKey: "inbox" }] }],
 }
