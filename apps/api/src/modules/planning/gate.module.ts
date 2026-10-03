@@ -3,6 +3,8 @@ import { GATE_AUTO_START_MS } from "@waypoint/shared"
 import { CurrentUser, Roles, type SessionUser } from "../../common/auth"
 import { PrismaService } from "../../common/prisma.service"
 import { LiveModule } from "../live/live.module"
+import { DemoService } from "../live/demo-state.service"
+import { LiveClockService } from "../live/live-clock.service"
 import { LiveService } from "../live/live.service"
 
 /**
@@ -18,6 +20,8 @@ export class GateService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly db: PrismaService,
     private readonly live: LiveService,
+    private readonly demo: DemoService,
+    private readonly clock: LiveClockService,
   ) {}
 
   onModuleInit() {
@@ -30,6 +34,20 @@ export class GateService implements OnModuleInit, OnModuleDestroy {
 
   /** Trips whose crew is complete, not held, and past the grace period go live on their own. */
   async autoStart() {
+    // Demo: the gate opens a simulated minute after the second claim, and only while the day is running.
+    if (this.demo.isOn()) {
+      const clock = this.clock.now()
+      if (!clock.running) return
+      const claimed = await this.db.trip.findMany({
+        where: { liveAt: null, heldAt: null, driverClaimedAt: { not: null }, loaderClaimedAt: { not: null }, plan: { status: "PUBLISHED" } },
+        select: { id: true, driverClaimedAt: true, loaderClaimedAt: true },
+      })
+      for (const t of claimed) {
+        const since = Date.now() - Math.max(t.driverClaimedAt!.getTime(), t.loaderClaimedAt!.getTime())
+        if ((since / 60_000) * clock.speed >= 1) await this.goLive(t.id, null)
+      }
+      return
+    }
     const due = await this.db.trip.findMany({
       where: {
         liveAt: null,
@@ -46,6 +64,11 @@ export class GateService implements OnModuleInit, OnModuleDestroy {
   private async goLive(tripId: string, actorId: string | null) {
     const res = await this.db.trip.updateMany({ where: { id: tripId, liveAt: null }, data: { liveAt: new Date(), heldAt: null } })
     if (!res.count) return
+    if (this.demo.isOn()) {
+      this.demo.recordLaunch(tripId, this.clock.now().minute)
+      this.demo.touch(tripId)
+      await this.demo.save()
+    }
     await this.db.auditLog.create({ data: { actorId, action: actorId ? "TRIP_STARTED" : "TRIP_STARTED_AUTO", entityType: "Trip", entityId: tripId } })
     this.live.invalidate()
   }

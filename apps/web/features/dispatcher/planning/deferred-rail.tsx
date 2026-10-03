@@ -57,7 +57,7 @@ export function DeferredCardView({ item, fits, overlay }: { item: PoolItem; fits
   )
 }
 
-function DeferredCard({ item, fits, trip, onAdd, onAssign }: { item: PoolItem; fits: boolean; trip?: Trip; onAdd: () => void; onAssign: () => void }) {
+function DeferredCard({ item, fits, trip, onAdd, onAssign, canAssign }: { item: PoolItem; fits: boolean; trip?: Trip; onAdd: () => void; onAssign: () => void; canAssign: boolean }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `pool:${item.decision.orderId}`, data: { type: "pool", orderId: item.decision.orderId } })
   return (
     <div ref={setNodeRef} className={cn("grid gap-1", isDragging && "opacity-35")}>
@@ -68,7 +68,7 @@ function DeferredCard({ item, fits, trip, onAdd, onAssign }: { item: PoolItem; f
         <Button variant="ghost" size="xs" className="flex-1 justify-start text-primary" onClick={onAdd} disabled={!trip}>
           <PlusCircle data-icon="inline-start" /> Add to {trip?.ref ?? "trip"}
         </Button>
-        {!item.local && (
+        {!item.local && canAssign && (
           <Button variant="ghost" size="xs" onClick={onAssign}>
             Assign…
           </Button>
@@ -84,12 +84,14 @@ export function DeferredRail({
   trip,
   onAdd,
   onAssign,
+  canAssign = true,
   height,
 }: {
   pool: PoolItem[]
   trip?: Trip
   onAdd: (orderId: string) => void
   onAssign: (item: PoolItem) => void
+  canAssign?: boolean
   height: string
 }) {
   const [q, setQ] = useState("")
@@ -127,7 +129,7 @@ export function DeferredRail({
       <ScrollArea className="min-h-0 flex-1 px-3 max-xl:h-72">
         <div className="grid gap-2.5 pb-1">
           {items.map((i) => (
-            <DeferredCard key={i.decision.orderId} item={i} fits={fitsTrip(i)} trip={trip} onAdd={() => onAdd(i.decision.orderId)} onAssign={() => onAssign(i)} />
+            <DeferredCard key={i.decision.orderId} item={i} fits={fitsTrip(i)} trip={trip} onAdd={() => onAdd(i.decision.orderId)} onAssign={() => onAssign(i)} canAssign={canAssign} />
           ))}
           {!items.length && (
             <div className="flex flex-col items-center gap-1 rounded-lg border-2 border-dashed py-10 text-center text-xs text-muted-foreground">

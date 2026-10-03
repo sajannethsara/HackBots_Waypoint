@@ -601,3 +601,83 @@ export interface OrderDetail {
   issues: IssueChip[]
   audit: { id: string; action: string; at: string; actor: string; entityType: string; after: unknown }[]
 }
+
+/** Everything that needs the dispatcher's attention for a depot and day. */
+export interface ExceptionsOverview {
+  plan: { id: string; status: "DRAFT" | "PUBLISHED"; version: number } | null
+  clockMinute: number
+  counts: { deferred: number; atRisk: number; gate: number; deliveries: number; issues: number; fleet: number }
+  deferred: {
+    orderId: string
+    ref: string
+    outlet: { id: string; name: string; districtId: string }
+    brand: Brand
+    temp: "CHILLED" | "AMBIENT"
+    weightKg: number
+    volumeM3: number
+    deferCount: number
+    priorityScore: number
+    reason: DeferralReason | null
+    source: "ENGINE" | "DISPATCHER"
+    unavoidable: boolean
+    explanation: string | null
+    by: string | null
+  }[]
+  atRisk: {
+    stopId: string
+    seq: number
+    tripId: string
+    tripRef: string
+    vehicleId: string
+    brand: Brand
+    live: boolean
+    orderId: string
+    orderRef: string
+    outlet: { id: string; name: string; districtId: string }
+    arrivalMin: number
+    windowCloseMin: number
+    reason: string | null
+  }[]
+  gate: {
+    tripId: string
+    ref: string
+    vehicleId: string
+    brand: Brand
+    districtId: string
+    stops: number
+    departMin: number
+    overdue: boolean
+    held: boolean
+    driver: string | null
+    driverClaimedAt: string | null
+    loader: string | null
+    loaderClaimedAt: string | null
+  }[]
+  deliveries: {
+    stopId: string
+    status: "PARTIAL" | "REFUSED"
+    at: string | null
+    tripId: string
+    tripRef: string
+    driver: string | null
+    orderId: string
+    orderRef: string
+    outlet: { id: string; name: string; districtId: string }
+    refusedQty: number
+    reason: string | null
+    receivedBy: string | null
+  }[]
+  issues: {
+    id: string
+    ref: string
+    type: IssueType
+    severity: IssueSeverity
+    status: IssueStatus
+    description: string
+    createdAt: string
+    tripRef: string | null
+    outletId: string | null
+    orderRef: string | null
+  }[]
+  fleet: { id: string; type: "TRUCK" | "VAN"; temp: "REEFER" | "AMBIENT"; kind: "WORKSHOP" | "FUEL"; usedL: number; quotaL: number }[]
+}

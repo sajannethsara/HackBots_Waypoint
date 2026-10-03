@@ -16,6 +16,7 @@ import { api, ApiError, qs, type Violation } from "@/lib/api"
 import type {
   Dashboard,
   DemandOverview,
+  ExceptionsOverview,
   IssueDetail,
   IssuesResponse,
   OrderDetail,
@@ -374,4 +375,15 @@ function useGateAction(action: "start" | "hold" | "release", ok: string) {
 
 export function useGate() {
   return { start: useGateAction("start", "Trip is live"), hold: useGateAction("hold", "Trip held at the depot"), release: useGateAction("release", "Hold lifted") }
+}
+
+export function useExceptions() {
+  const { depotId, date, ready } = useWorkspace()
+  return useQuery({
+    queryKey: ["exceptions", depotId, date],
+    queryFn: () => api<ExceptionsOverview>(`/exceptions${qs({ depotId, date })}`),
+    enabled: ready,
+    refetchInterval: 20_000,
+    placeholderData: (prev) => prev,
+  })
 }

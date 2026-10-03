@@ -345,14 +345,14 @@ export class PlanningService {
    * tight or missed windows are allowed and surface as at-risk stops.
    */
   async saveLayout(user: SessionUser, planId: string, input: SaveLayoutInput) {
-    const plan = await this.requireDraft(planId)
+    const plan = await this.requireEditable(planId)
     await this.applyLayout(user, plan, input.trips, input.deferrals)
     return this.get(planId)
   }
 
   /** Creates an empty trip (optionally seeded with orders) for a vehicle, brand and district. */
   async createTrip(user: SessionUser, planId: string, input: CreateTripInput) {
-    const plan = await this.requireDraft(planId)
+    const plan = await this.requireEditable(planId)
     const [vehicle, district, trips] = await Promise.all([
       this.db.vehicle.findFirst({ where: { id: input.vehicleId, depotId: plan.depotId } }),
       this.db.district.findFirst({ where: { id: input.districtId, depotId: plan.depotId } }),
@@ -381,6 +381,8 @@ export class PlanningService {
         plannedFuelL: 0,
         loadWeightKg: 0,
         loadVolumeM3: 0,
+        // A published plan has already attached drivers; a trip added to it gets its vehicle driver straight away.
+        driverId: plan.status === "PUBLISHED" ? (await this.db.user.findFirst({ where: { vehicleId: vehicle.id }, select: { id: true } }))?.id : undefined,
       },
     })
     await this.db.auditLog.create({
@@ -393,10 +395,12 @@ export class PlanningService {
 
   /** Removes a trip; the orders on it return to the deferred pool with a recorded reason. */
   async removeTrip(user: SessionUser, planId: string, tripId: string) {
-    await this.requireDraft(planId)
+    const plan = await this.requireEditable(planId)
     const trip = await this.db.trip.findFirst({ where: { id: tripId, planId }, include: { stops: true } })
     if (!trip) throw new NotFoundException("Trip not in this plan")
+    if (trip.liveAt || trip.departedAt) throw new ConflictException(`${trip.ref} is live and can no longer be changed`)
     await this.db.$transaction(async (tx) => {
+      await tx.fuelLedgerEntry.deleteMany({ where: { tripId } })
       for (const st of trip.stops)
         await tx.planDecision.update({
           where: { planId_orderId: { planId, orderId: st.orderId } },
@@ -406,13 +410,14 @@ export class PlanningService {
       await tx.auditLog.create({ data: { actorId: user.sub, action: "TRIP_REMOVED", entityType: "Trip", entityId: tripId, before: { ref: trip.ref, orders: trip.stops.length } } })
     })
     await this.setManual(planId, tripId, false)
+    if (plan.status === "PUBLISHED") await this.syncPublished(plan, { placed: [], deferred: trip.stops.map((s) => s.orderId), trips: [] })
     await this.refreshSummary(planId)
     return this.get(planId)
   }
 
   /** Puts one trip back to what the engine generated (stops and sequence). */
   async resetTrip(user: SessionUser, planId: string, tripId: string) {
-    const plan = await this.requireDraft(planId)
+    const plan = await this.requireEditable(planId)
     const trip = await this.db.trip.findFirst({ where: { id: tripId, planId }, include: { stops: true } })
     if (!trip) throw new NotFoundException("Trip not in this plan")
     const snapshot = (plan.summary as { baseline?: Record<string, string[]> } | null)?.baseline
@@ -502,6 +507,14 @@ export class PlanningService {
   }
 
   // ── internals ──
+
+  /** Draft plans are fully editable; a published plan can still be changed for trips that have not gone live. */
+  private async requireEditable(planId: string) {
+    const plan = await this.db.plan.findUnique({ where: { id: planId } })
+    if (!plan) throw new NotFoundException("Plan not found")
+    if (plan.status === "SUPERSEDED") throw new ConflictException("This plan version was replaced. Open the current plan to edit it.")
+    return plan
+  }
 
   private async requireDraft(planId: string) {
     const plan = await this.db.plan.findUnique({ where: { id: planId } })
@@ -633,14 +646,15 @@ export class PlanningService {
 
   private async applyLayout(
     user: SessionUser,
-    plan: { id: string; depotId: string; date: Date },
+    plan: { id: string; depotId: string; date: Date; status?: string },
     layouts: TripLayoutInput[],
     deferrals: SaveLayoutInput["deferrals"],
     opts: { resequence?: boolean } = {},
   ) {
     const planId = plan.id
-    const decisions = await this.db.planDecision.findMany({ where: { planId }, select: { orderId: true } })
+    const decisions = await this.db.planDecision.findMany({ where: { planId }, select: { orderId: true, decision: true } })
     const inPlan = new Set(decisions.map((d) => d.orderId))
+    const wasDeferred = new Set(decisions.filter((d) => d.decision === "DEFERRED").map((d) => d.orderId))
     const placed = new Map<string, string>() // orderId -> tripId
     for (const l of layouts)
       for (const id of l.orderIds) {
@@ -654,6 +668,12 @@ export class PlanningService {
     const before = await this.db.stop.findMany({ where: { trip: { planId } }, select: { orderId: true, tripId: true } })
     const beforeTrip = new Map(before.map((s) => [s.orderId, s.tripId]))
     const layoutTrips = new Set(layouts.map((l) => l.tripId))
+    // Once a trip is live it belongs to the road: neither it nor its orders can be edited.
+    const liveRows = await this.db.trip.findMany({ where: { planId, OR: [{ liveAt: { not: null } }, { departedAt: { not: null } }] }, select: { id: true, ref: true } })
+    const liveTrips = new Map(liveRows.map((t) => [t.id, t.ref]))
+    for (const id of layoutTrips) if (liveTrips.has(id)) throw new ConflictException(`${liveTrips.get(id)} is live and can no longer be changed`)
+    for (const s of before)
+      if (liveTrips.has(s.tripId) && (placed.has(s.orderId) || deferIds.has(s.orderId))) throw new ConflictException(`That order is on ${liveTrips.get(s.tripId)}, which is already live`)
     // An order taken off an edited trip must either land on another edited trip or be deferred with a reason.
     for (const s of before)
       if (layoutTrips.has(s.tripId) && !placed.has(s.orderId) && !deferIds.has(s.orderId))
@@ -729,7 +749,62 @@ export class PlanningService {
     }, { timeout: 30_000 })
     for (const l of layouts) await this.setManual(planId, l.tripId, !opts.resequence)
     for (const tripId of lost) await this.recomputeTrip(tripId, plan.depotId, plan.date)
+    if (plan.status === "PUBLISHED")
+      await this.syncPublished(plan, {
+        placed: [...placed.keys()].filter((id) => wasDeferred.has(id)),
+        deferred: deferrals.map((d) => d.orderId).filter((id) => !wasDeferred.has(id)),
+        trips: [...layoutTrips, ...lost],
+      })
     await this.refreshSummary(planId)
+  }
+
+  /**
+   * A published plan has already told stores and the fuel ledger what will happen. After an edit:
+   * orders that came back onto a trip are scheduled again, orders pushed off roll to the next day,
+   * fuel is re-booked for the edited trips, and their crews must claim them again.
+   */
+  private async syncPublished(plan: { id: string; depotId: string; date: Date }, change: { placed: string[]; deferred: string[]; trips: string[] }) {
+    const date = plan.date.toISOString().slice(0, 10)
+    const nextDay = await this.clock.nextOperatingDay(date)
+    const cal = await this.clock.calendar(date)
+    const trips = change.trips.length ? await this.db.trip.findMany({ where: { id: { in: change.trips } }, include: { stops: { select: { id: true } } } }) : []
+    const touched = [...change.placed, ...change.deferred]
+    const orders = touched.length ? await this.db.order.findMany({ where: { id: { in: touched } }, select: { id: true, ref: true, outletId: true, deferCount: true } }) : []
+    const stops = change.placed.length
+      ? await this.db.stop.findMany({ where: { orderId: { in: change.placed }, trip: { planId: plan.id } }, select: { orderId: true, plannedArrivalMin: true, trip: { select: { ref: true, vehicleId: true } } } })
+      : []
+    const managers = orders.length ? await this.db.user.findMany({ where: { role: "STORE_MANAGER", outletId: { in: orders.map((o) => o.outletId) } }, select: { id: true, outletId: true } }) : []
+    const manager = new Map(managers.map((m) => [m.outletId!, m.id]))
+    const stopOf = new Map(stops.map((s) => [s.orderId, s]))
+
+    await this.db.$transaction(async (tx) => {
+      for (const o of orders) {
+        const back = change.placed.includes(o.id)
+        await tx.order.update({
+          where: { id: o.id },
+          data: back
+            ? { status: "PLANNED", deliveryDate: plan.date, deferCount: Math.max(0, o.deferCount - 1) }
+            : { status: "DEFERRED", deliveryDate: dateOnly(nextDay), deferCount: { increment: 1 } },
+        })
+        const userId = manager.get(o.outletId)
+        const hit = stopOf.get(o.id)
+        if (userId)
+          await tx.notification.create({
+            data:
+              back && hit
+                ? { userId, type: "ORDER_SCHEDULED", title: `${o.ref} scheduled`, body: `Arriving around ${hhmm(hit.plannedArrivalMin)} on ${hit.trip.ref} (${hit.trip.vehicleId}).`, link: `/store-manager/orders/${o.id}` }
+                : { userId, type: "ORDER_DEFERRED", title: `${o.ref} moved to ${nextDay}`, body: "Dispatch changed the plan after it was published.", link: `/store-manager/orders/${o.id}` },
+          })
+      }
+      for (const t of trips) {
+        await tx.fuelLedgerEntry.deleteMany({ where: { tripId: t.id, kind: "PLANNED" } })
+        if (t.stops.length && cal)
+          await tx.fuelLedgerEntry.create({ data: { vehicleId: t.vehicleId, tripId: t.id, date: plan.date, isoYear: cal.isoYear, isoWeek: cal.isoWeek, kind: "PLANNED", km: t.plannedKm, litres: t.plannedFuelL } })
+      }
+      // The load list changed, so whoever claimed these trips must look again.
+      if (trips.length) await tx.trip.updateMany({ where: { id: { in: trips.map((t) => t.id) } }, data: { driverClaimedAt: null, loaderClaimedAt: null, loaderId: null } })
+      await tx.auditLog.create({ data: { action: "PUBLISHED_PLAN_EDITED", entityType: "Plan", entityId: plan.id, after: { scheduled: change.placed.length, deferred: change.deferred.length, trips: change.trips.length } } })
+    })
   }
 
   /** Re-sequence and re-time a trip after a manual change. */

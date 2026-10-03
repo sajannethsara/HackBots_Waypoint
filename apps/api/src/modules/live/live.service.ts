@@ -5,6 +5,7 @@ import { PrismaService } from "../../common/prisma.service"
 import { IssuesService, type SystemIssue } from "../issues/issues.service"
 import { RoutingService } from "../routing/routing.service"
 import { LiveClockService } from "./live-clock.service"
+import { DemoService } from "./demo-state.service"
 import { overlayDriver, type DriverTripState } from "./driver-overlay"
 import { alertsAt, buildTimeline, tripAt, type SimTrip } from "./simulation"
 
@@ -34,13 +35,23 @@ export class LiveService {
     private readonly calendar: ClockService,
     private readonly issues: IssuesService,
     private readonly routing: RoutingService,
+    private readonly demo: DemoService,
   ) {}
+
+  /** The dispatcher's clock: the replay in demo mode, the real time of day otherwise. */
+  effectiveClock() {
+    return this.clock.effective(this.demo.isOn())
+  }
 
   async snapshot(depotId: string, date: string): Promise<LiveSnapshot> {
     const data = await this.load(depotId, date)
-    const clock = this.clock.now()
+    const demoOn = this.demo.isOn()
+    const clock = this.effectiveClock()
     const driverState = await this.driverState(data.trips.map((t) => t.sim.id))
-    const trips = data.trips.map(({ sim, timeline }) => overlayDriver(tripAt(sim, timeline, clock.minute), driverState.get(sim.id)))
+    // Real mode replays nothing: a trip waits at the depot until its driver reports otherwise.
+    const trips = data.trips.map(({ sim, timeline }) =>
+      overlayDriver(tripAt(sim, timeline, demoOn ? clock.minute : Math.min(clock.minute, timeline.depart - 0.01)), driverState.get(sim.id)),
+    )
     const onRoad = trips.filter((t) => ["ON_ROUTE", "AT_OUTLET", "DELAYED", "RETURNING"].includes(t.status))
     await this.monitor(depotId, date, trips)
     const openIssues = await this.db.issue.count({ where: { status: { not: "RESOLVED" }, trip: { planId: data.planId ?? "" } } })
@@ -105,7 +116,7 @@ export class LiveService {
     const key = `${depotId}|${date}`
     if (Date.now() - (this.lastMonitor.get(key) ?? 0) < 5_000) return
     this.lastMonitor.set(key, Date.now())
-    const at = hhmm(this.clock.now().minute)
+    const at = hhmm(this.effectiveClock().minute)
     const items: SystemIssue[] = []
     for (const t of trips) {
       if (t.status === "DELAYED" && t.delayMin >= 30)
@@ -223,6 +234,7 @@ export class LiveService {
           interStopMin: t.district.interStopMin,
           roadFactor,
           depot: depotPos,
+          launchMin: this.demo.launchMin(t.id),
           legs: (t.route as unknown as LiveRoute | null)?.legs.map((leg) => leg.map(([lat, lng]) => ({ lat, lng }))),
           stops: t.stops.map((s) => {
             const o = s.order.outlet

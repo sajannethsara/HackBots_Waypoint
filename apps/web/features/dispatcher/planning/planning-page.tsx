@@ -21,23 +21,27 @@ export function PlanningPage({ mapboxToken }: { mapboxToken?: string }) {
   const replanning = !!plan && replanFrom === plan.id
   const setReplanning = (on: boolean) => setReplanFrom(on && plan ? plan.id : null)
 
-  const step: 1 | 2 | 3 = !plan || replanning ? 1 : plan.status === "DRAFT" ? 2 : 3
+  // A published plan opens on the depot gate; Review & adjust stays reachable for trips that have not gone live.
+  const [view, setView] = useState<"gate" | "review">("gate")
+  const published = !!plan && plan.status === "PUBLISHED" && !replanning
+  const step: 1 | 2 | 3 = !plan || replanning ? 1 : plan.status === "DRAFT" || view === "review" ? 2 : 3
   const description = {
     1: "Generate an initial delivery plan from today's confirmed orders and available vehicles.",
     2: "Review trips, adjust allocations and record deferral reasons. Every change is validated against the operating rules.",
     3: "The plan is published. Replan creates a new version if conditions change.",
   }[step]
+  const note = published && view === "review" ? "Published plan: live trips are locked; held and waiting trips can still be adjusted." : description
 
   return (
     <div className="grid gap-4">
-      <PageHeader title="Planning" description={description} />
-      <Stepper step={step} />
+      <PageHeader title="Planning" description={note} />
+      <Stepper step={step} published={published} onStep={(n) => setView(n === 2 ? "review" : "gate")} />
       {isLoading ? (
         <Skeleton className="h-96 rounded-xl" />
       ) : step === 1 ? (
         <GenerateStep onCancel={replanning ? () => setReplanning(false) : undefined} />
       ) : step === 2 && plan ? (
-        <ReviewStep plan={plan} mapboxToken={mapboxToken} />
+        <ReviewStep plan={plan} mapboxToken={mapboxToken} onOpenGate={() => setView("gate")} />
       ) : plan ? (
         <PublishedStep plan={plan} onReplan={() => setReplanning(true)} />
       ) : null}

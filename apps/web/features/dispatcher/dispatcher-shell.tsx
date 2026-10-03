@@ -5,13 +5,16 @@ import { WorkspaceBar } from "@/components/layout/workspace-bar"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { ChatProvider, useUnread } from "@/features/chat/use-chat"
 import { ChatSheetProvider } from "@/features/chat/chat-sheet"
-import { useIssueSummary } from "@/features/dispatcher/queries"
+import { useExceptions, useIssueSummary } from "@/features/dispatcher/queries"
 import { WorkspaceProvider } from "@/hooks/use-workspace"
 
 function DispatcherSidebar() {
   const { data } = useIssueSummary()
   const { data: unread } = useUnread()
-  return <AppSidebar role="DISPATCHER" badges={{ issues: data?.open, inbox: unread?.unread }} />
+  const { data: ex } = useExceptions()
+  // Issues have their own badge, so the Exceptions badge counts everything else.
+  const exceptions = ex ? ex.counts.deferred + ex.counts.atRisk + ex.counts.gate + ex.counts.deliveries + ex.counts.fleet : undefined
+  return <AppSidebar role="DISPATCHER" badges={{ issues: data?.open, inbox: unread?.unread, exceptions }} />
 }
 
 export function DispatcherShell({ wsUrl, children }: { wsUrl?: string; children: React.ReactNode }) {

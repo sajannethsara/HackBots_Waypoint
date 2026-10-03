@@ -47,7 +47,7 @@ export const NAV: Record<Role, NavGroup[]> = {
       items: [
         { title: "Orders", href: "/dispatcher/orders", icon: ClipboardList },
         { title: "Planning", href: "/dispatcher/planning", icon: Workflow },
-        { title: "Exceptions", href: "/dispatcher/exceptions", icon: AlertTriangle, badgeKey: "exceptions", soon: true },
+        { title: "Exceptions", href: "/dispatcher/exceptions", icon: AlertTriangle, badgeKey: "exceptions" },
       ],
     },
     {
