@@ -34,8 +34,18 @@ export function TrackPanel({ orderId, mapboxToken, defaultOpen = true }: { order
           </h2>
           {open && view && <Freshness view={view} />}
         </div>
-        <Button size="xs" variant="outline" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-          {open ? "Hide map" : "Track live"}
+        <Button size={open ? "xs" : "sm"} variant={open ? "outline" : "default"} onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          {open ? (
+            "Hide map"
+          ) : (
+            <>
+              <span className="relative flex size-2">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-60 motion-reduce:animate-none" />
+                <span className="relative inline-flex size-2 rounded-full bg-current" />
+              </span>
+              Track live
+            </>
+          )}
         </Button>
       </div>
 
