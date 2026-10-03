@@ -190,6 +190,18 @@ enum ReceiptStatus {
   DISPUTED
 }
 
+enum ChangeKind {
+  WINDOW // receiving window
+  ACCESS // dock type and parking constraint
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 // How the store found a received line
 enum LineCondition {
   GOOD
@@ -263,27 +275,71 @@ model District {
 
 // outlets.csv
 model Outlet {
-  id                 String            @id // "OUT001"
+  id                 String                @id // "OUT001"
   name               String
   brand              Brand
   districtId         String
-  district           District          @relation(fields: [districtId], references: [id])
+  district           District              @relation(fields: [districtId], references: [id])
   depotId            String
-  depot              Depot             @relation(fields: [depotId], references: [id])
+  depot              Depot                 @relation(fields: [depotId], references: [id])
   dockType           DockType
   parkingConstraint  ParkingConstraint
   mallWindowOpenMin  Int?
   mallWindowCloseMin Int?
   windowOpenMin      Int
   windowCloseMin     Int
-  lastDeliveredOn    DateTime?         @db.Date // drives "days since last served"
+  lastDeliveredOn    DateTime?             @db.Date // drives "days since last served"
   lat                Float? // map enrichment: deterministic point near the district centre
   lng                Float?
   managers           User[]
   orders             Order[]
   issues             Issue[]
+  profile            OutletProfile?
+  changeRequests     OutletChangeRequest[]
 
   @@index([depotId, brand, districtId])
+}
+
+// What the store tells us about itself. Not part of the datathon CSVs, so it lives beside the outlet.
+model OutletProfile {
+  outletId              String   @id
+  outlet                Outlet   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  address               String?
+  phone                 String?
+  email                 String?
+  tradingOpenMin        Int?
+  tradingCloseMin       Int?
+  floorAreaM2           Int?
+  departments           Json     @default("[]") // [{ name, areaM2 }]: the footprint of each department
+  leadership            Json     @default("[]") // [{ role, name, phone, email }]
+  receivingContactName  String?
+  receivingContactPhone String?
+  receivingStaff        Int?
+  hasForklift           Boolean  @default(false)
+  hasColdRoom           Boolean  @default(false)
+  receivingNotes        String?
+  updatedAt             DateTime @updatedAt @db.Timestamptz
+}
+
+// A store asking for something that changes how it is planned (window, dock, parking). The dispatcher decides.
+model OutletChangeRequest {
+  id            String        @id @default(cuid())
+  outletId      String
+  outlet        Outlet        @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  kind          ChangeKind
+  current       Json
+  proposed      Json
+  reason        String
+  status        RequestStatus @default(PENDING)
+  requestedById String
+  requestedBy   User          @relation("ChangeRequestedBy", fields: [requestedById], references: [id])
+  createdAt     DateTime      @default(now()) @db.Timestamptz
+  decidedById   String?
+  decidedBy     User?         @relation("ChangeDecidedBy", fields: [decidedById], references: [id])
+  decidedAt     DateTime?     @db.Timestamptz
+  decisionNote  String?
+
+  @@index([outletId, status])
 }
 
 // vehicles.csv
@@ -358,37 +414,40 @@ model RoadCondition {
 // ─────────────────────────────── Identity ───────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  phone        String?
-  passwordHash String
-  role         Role
-  depotId      String? // dispatcher / loader scope
-  depot        Depot?   @relation(fields: [depotId], references: [id])
-  outletId     String? // store manager scope
-  outlet       Outlet?  @relation(fields: [outletId], references: [id])
-  vehicleId    String?  @unique // driver's assigned vehicle
-  vehicle      Vehicle? @relation("DriverVehicle", fields: [vehicleId], references: [id])
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now()) @db.Timestamptz
+  id                String   @id @default(cuid())
+  email             String   @unique
+  name              String
+  phone             String?
+  passwordHash      String
+  role              Role
+  depotId           String? // dispatcher / loader scope
+  depot             Depot?   @relation(fields: [depotId], references: [id])
+  outletId          String? // store manager scope
+  outlet            Outlet?  @relation(fields: [outletId], references: [id])
+  vehicleId         String?  @unique // driver's assigned vehicle
+  vehicle           Vehicle? @relation("DriverVehicle", fields: [vehicleId], references: [id])
+  isActive          Boolean  @default(true)
+  notificationPrefs Json? // { orders, deliveries, issues, messages } booleans; missing means everything on
+  createdAt         DateTime @default(now()) @db.Timestamptz
 
-  ordersCreated     Order[]            @relation("OrderCreatedBy")
-  plansPublished    Plan[]             @relation("PlanPublishedBy")
-  decisionsMade     PlanDecision[]     @relation("DecisionOverriddenBy")
-  tripsLoaded       Trip[]             @relation("TripLoadedBy")
-  tripsDriven       Trip[]             @relation("TripDriver")
-  deliveryEvents    DeliveryEvent[]
-  locations         DriverLocation[]
-  issueChatMembers  IssueChatMember[]
-  issueChatMessages IssueChatMessage[]
-  issuesReported    Issue[]            @relation("IssueReportedBy")
-  issuesResolved    Issue[]            @relation("IssueResolvedBy")
-  receipts          Receipt[]
-  notifications     Notification[]
-  auditLogs         AuditLog[]
-  conversations     Conversation[]     @relation("ConversationMember")
-  messagesSent      Message[]          @relation("MessageSender")
+  ordersCreated         Order[]               @relation("OrderCreatedBy")
+  plansPublished        Plan[]                @relation("PlanPublishedBy")
+  decisionsMade         PlanDecision[]        @relation("DecisionOverriddenBy")
+  tripsLoaded           Trip[]                @relation("TripLoadedBy")
+  tripsDriven           Trip[]                @relation("TripDriver")
+  deliveryEvents        DeliveryEvent[]
+  locations             DriverLocation[]
+  issueChatMembers      IssueChatMember[]
+  issueChatMessages     IssueChatMessage[]
+  issuesReported        Issue[]               @relation("IssueReportedBy")
+  issuesResolved        Issue[]               @relation("IssueResolvedBy")
+  receipts              Receipt[]
+  notifications         Notification[]
+  auditLogs             AuditLog[]
+  conversations         Conversation[]        @relation("ConversationMember")
+  messagesSent          Message[]             @relation("MessageSender")
+  changeRequestsMade    OutletChangeRequest[] @relation("ChangeRequestedBy")
+  changeRequestsDecided OutletChangeRequest[] @relation("ChangeDecidedBy")
 }
 
 // ──────────────────────────────── Orders ────────────────────────────────
@@ -620,7 +679,8 @@ model MediaAsset {
   kind         MediaKind
   mimeType     String
   sizeBytes    Int
-  data         Bytes // compressed on device; small enough for Postgres
+  data         Bytes // compressed on device; small enough for Postgres. Empty when the file lives in `filePath`.
+  filePath     String? // relative to the uploads folder (see MediaStorage); set for store issue photos
   createdAt    DateTime         @default(now()) @db.Timestamptz
   podSignature ProofOfDelivery? @relation("PodSignature")
   podPhoto     ProofOfDelivery? @relation("PodPhoto")

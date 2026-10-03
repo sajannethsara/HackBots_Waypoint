@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Injectable, Module, Post, Res, UnauthorizedException } from "@nestjs/common"
+import { Body, Controller, Get, Injectable, Module, Post, Res, UnauthorizedException, UnprocessableEntityException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
-import { loginSchema, type LoginInput } from "@waypoint/shared"
+import { changePasswordSchema, loginSchema, type ChangePasswordInput, type LoginInput } from "@waypoint/shared"
 import bcrypt from "bcryptjs"
 import type { Response } from "express"
 import { CurrentUser, Public, SESSION_COOKIE, type SessionUser } from "../../common/auth"
@@ -27,6 +27,18 @@ export class AuthService {
       vehicleId: user.vehicleId,
     }
     return { token: await this.jwt.signAsync(session), user: session }
+  }
+
+  /** Changes the signed-in user's own password. The current one must be right, so a stolen session cannot lock the owner out. */
+  async changePassword(userId: string, { currentPassword, newPassword }: ChangePasswordInput) {
+    const user = await this.db.user.findUniqueOrThrow({ where: { id: userId } })
+    if (!(await bcrypt.compare(currentPassword, user.passwordHash)))
+      throw new UnprocessableEntityException({ message: "Password not changed", issues: [{ path: "currentPassword", message: "That is not your current password" }] })
+    await this.db.$transaction([
+      this.db.user.update({ where: { id: userId }, data: { passwordHash: await bcrypt.hash(newPassword, 10) } }),
+      this.db.auditLog.create({ data: { actorId: userId, action: "PASSWORD_CHANGED", entityType: "User", entityId: userId } }),
+    ])
+    return { ok: true }
   }
 
   me(id: string) {
@@ -70,6 +82,11 @@ export class AuthController {
   logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie(SESSION_COOKIE, { path: "/" })
     return { ok: true }
+  }
+
+  @Post("password")
+  password(@CurrentUser() user: SessionUser, @Body(new ZodPipe(changePasswordSchema)) body: ChangePasswordInput) {
+    return this.auth.changePassword(user.sub, body)
   }
 
   @Get("me")

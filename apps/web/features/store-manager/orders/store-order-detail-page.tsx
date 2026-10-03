@@ -2,8 +2,9 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { ArrowLeft, Pencil, X } from "lucide-react"
+import { ArrowLeft, ClipboardCheck, MessageSquare, Pencil, TriangleAlert, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Empty,
   EmptyDescription,
@@ -11,15 +12,20 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useChatSheet } from "@/features/chat/chat-sheet"
 import { fmtDate } from "@/lib/format"
 import { useStoreOrder } from "../queries"
+import { TrackPanel } from "../live/track-panel"
+import { ReportIssueDialog } from "../issues/report-issue-dialog"
 import { LOCKED_STATUSES } from "../shared/order-bits"
 import { CancelOrderDialog } from "./cancel-order-dialog"
 import { OrderHeaderChips, StoreOrderView } from "./store-order-view"
 
-export function StoreOrderDetailPage({ id }: { id: string }) {
+export function StoreOrderDetailPage({ id, mapboxToken }: { id: string; mapboxToken?: string }) {
   const { data: o, isLoading, isError } = useStoreOrder(id)
   const [cancelling, setCancelling] = useState(false)
+  const [reporting, setReporting] = useState(false)
+  const chat = useChatSheet()
 
   if (isError)
     return (
@@ -69,37 +75,53 @@ export function StoreOrderDetailPage({ id }: { id: string }) {
             for {o.outlet.name}.
           </p>
         </div>
-        {o.status === "SUBMITTED" && (
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              nativeButton={false}
-              render={<Link href={`/store-manager/orders/new?edit=${o.id}`} />}
-            >
-              <Pencil data-icon="inline-start" /> Edit order
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {o.status === "SUBMITTED" && (
+            <>
+              <Button size="sm" nativeButton={false} render={<Link href={`/store-manager/orders/new?edit=${o.id}`} />}>
+                <Pencil data-icon="inline-start" /> Edit order
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setCancelling(true)}>
+                <X data-icon="inline-start" /> Cancel order
+              </Button>
+            </>
+          )}
+          {o.status === "DRAFT" && (
+            <Button size="sm" nativeButton={false} render={<Link href={`/store-manager/orders/new?draft=${o.id}`} />}>
+              <Pencil data-icon="inline-start" /> Continue editing
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setCancelling(true)}>
-              <X data-icon="inline-start" /> Cancel order
+          )}
+          {(o.status === "DELIVERED" || o.status === "PARTIAL") && !o.receipt && (
+            <Button size="sm" nativeButton={false} render={<Link href={`/store-manager/orders/${o.id}/receive`} />}>
+              <ClipboardCheck data-icon="inline-start" /> Receive delivery
             </Button>
-          </div>
-        )}
-        {LOCKED_STATUSES.includes(o.status) && (
-          <p className="max-w-xs text-xs text-muted-foreground">
-            Dispatch has planned this order, so it can no longer be edited or cancelled.
-            Message dispatch if something has to change.
-          </p>
-        )}
-        {o.status === "DRAFT" && (
-          <Button
-            size="sm"
-            nativeButton={false}
-            render={<Link href={`/store-manager/orders/new?draft=${o.id}`} />}
-          >
-            <Pencil data-icon="inline-start" /> Continue editing
-          </Button>
-        )}
+          )}
+          {["DELIVERED", "PARTIAL", "RECEIVED", "REFUSED"].includes(o.status) && (
+            <Button size="sm" variant="outline" onClick={() => setReporting(true)}>
+              <TriangleAlert data-icon="inline-start" /> Report issue
+            </Button>
+          )}
+          {o.delivery && (
+            <Button size="sm" variant="outline" onClick={() => chat.open({})}>
+              <MessageSquare data-icon="inline-start" /> Message dispatch
+            </Button>
+          )}
+          {LOCKED_STATUSES.includes(o.status) && (
+            <p className="w-full text-right text-xs text-muted-foreground sm:max-w-xs">
+              Dispatch has planned this order, so it can no longer be edited or cancelled. Message dispatch if something has to change.
+            </p>
+          )}
+        </div>
       </div>
+      {o.status === "IN_TRANSIT" && (
+        <Card size="sm">
+          <CardContent>
+            <TrackPanel orderId={o.id} mapboxToken={mapboxToken} />
+          </CardContent>
+        </Card>
+      )}
       <StoreOrderView o={o} />
+      <ReportIssueDialog order={reporting ? { id: o.id, ref: o.ref } : null} onClose={() => setReporting(false)} />
       <CancelOrderDialog order={cancelling ? { id: o.id, ref: o.ref } : null} onClose={() => setCancelling(false)} />
     </div>
   )

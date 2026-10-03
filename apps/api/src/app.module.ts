@@ -11,6 +11,7 @@ import { DriverModule } from "./modules/driver/driver.module"
 import { HealthModule } from "./modules/health/health.module"
 import { IssueChatModule } from "./modules/issue-chat/issue-chat.module"
 import { IssuesModule } from "./modules/issues/issues.module"
+import { MediaModule } from "./modules/media/media.module"
 import { LiveModule } from "./modules/live/live.module"
 import { TripsModule } from "./modules/trips/trips.module"
 import { OutletsModule } from "./modules/outlets/outlets.module"
@@ -44,6 +45,7 @@ import { ReferenceModule } from "./modules/reference/reference.module"
     VehiclesModule,
     OutletsModule,
     StoreModule,
+    MediaModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })

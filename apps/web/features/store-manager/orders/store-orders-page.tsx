@@ -244,11 +244,11 @@ function OrdersTable({ rows, tab, onQuickView, onCancel, onOpen }: { rows: Store
       <TableHeader>
         <TableRow className="text-xs">
           <TableHead className="pl-4">Order</TableHead>
-          <TableHead>Brand</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead className="text-right">Items</TableHead>
-          <TableHead className="text-right">Units</TableHead>
-          <TableHead className="text-right">Weight</TableHead>
+          <TableHead className="hidden sm:table-cell">Brand</TableHead>
+          <TableHead className="hidden md:table-cell">Type</TableHead>
+          <TableHead className="hidden text-right md:table-cell">Items</TableHead>
+          <TableHead className="hidden text-right sm:table-cell">Units</TableHead>
+          <TableHead className="hidden text-right md:table-cell">Weight</TableHead>
           <TableHead>{tab === "drafts" ? "Requested for" : "Delivery date"}</TableHead>
           <TableHead>Status</TableHead>
           <TableHead className="w-10 pr-4">
@@ -264,15 +264,15 @@ function OrdersTable({ rows, tab, onQuickView, onCancel, onOpen }: { rows: Store
                 {o.ref}
               </Link>
             </TableCell>
-            <TableCell>
+            <TableCell className="hidden sm:table-cell">
               <BrandBadge brand={o.brand} />
             </TableCell>
-            <TableCell>
+            <TableCell className="hidden md:table-cell">
               <TempIcon temp={o.temp} />
             </TableCell>
-            <TableCell className="text-right tabular-nums">{o.items}</TableCell>
-            <TableCell className="text-right tabular-nums">{o.units}</TableCell>
-            <TableCell className="text-right tabular-nums">{fmtNum(o.weightKg)} kg</TableCell>
+            <TableCell className="hidden text-right tabular-nums md:table-cell">{o.items}</TableCell>
+            <TableCell className="hidden text-right tabular-nums sm:table-cell">{o.units}</TableCell>
+            <TableCell className="hidden text-right tabular-nums md:table-cell">{fmtNum(o.weightKg)} kg</TableCell>
             <TableCell className="tabular-nums">{shortDate(o.deliveryDate)}</TableCell>
             <TableCell>
               <StoreOrderStatus status={o.status} />

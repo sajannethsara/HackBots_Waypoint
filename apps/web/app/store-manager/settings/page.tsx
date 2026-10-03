@@ -1,6 +1,5 @@
-import { Settings } from "lucide-react"
-import { SectionPlaceholder } from "@/features/store-manager/shared/section-placeholder"
+import { StoreSettingsPage } from "@/features/store-manager/settings/store-settings-page"
 
 export default function Page() {
-  return <SectionPlaceholder title="Settings" description="Notification preferences and password." icon={Settings} note="Settings arrive in a later phase." />
+  return <StoreSettingsPage />
 }
