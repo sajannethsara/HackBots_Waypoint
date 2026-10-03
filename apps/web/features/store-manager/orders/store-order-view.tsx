@@ -7,6 +7,8 @@ import { StatCard } from "@/components/shared/stat-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { STORE_CANCEL_REASON_LABEL } from "@waypoint/shared"
+import Link from "next/link"
+import { ISSUE_TYPE_META, type IssueType } from "@waypoint/shared"
 import { fmtDateTime, fmtNum, minToHHMM } from "@/lib/format"
 import { shortDate } from "../shared/order-bits"
 import { StoreOrderStatus } from "../shared/order-status"
@@ -125,6 +127,27 @@ export function StoreOrderView({ o, columns = "wide" }: { o: StoreOrderDetail; c
           <CardContent className="text-sm">
             Confirmed by {o.receipt.confirmedBy} on {fmtDateTime(o.receipt.confirmedAt)}.
             {o.receipt.notes && <p className="mt-2 rounded-md bg-muted/50 p-2 text-xs">{o.receipt.notes}</p>}
+          </CardContent>
+        </Card>
+      )}
+
+      {o.issues.length > 0 && (
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle>Issues</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="grid gap-2 text-sm">
+              {o.issues.map((i) => (
+                <li key={i.id} className="flex items-center justify-between gap-3">
+                  <Link href={`/store-manager/issues/${i.id}`} className="font-medium hover:underline">
+                    {i.ref}
+                  </Link>
+                  <span className="text-muted-foreground">{ISSUE_TYPE_META[i.type as IssueType]?.label ?? i.type}</span>
+                  <span className="text-xs capitalize text-muted-foreground">{i.status.toLowerCase()}</span>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       )}

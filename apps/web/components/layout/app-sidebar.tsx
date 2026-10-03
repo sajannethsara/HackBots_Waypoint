@@ -71,7 +71,7 @@ export function AppSidebar({ role, badges = {} }: { role: Role; badges?: Partial
                     >
                       <item.icon />
                       <span>{item.title}</span>
-                      {item.soon && !count && <span className="ml-auto text-[10px] text-muted-foreground/60">soon</span>}
+                      {item.soon && !count && <span className="ml-auto text-[10px] text-muted-foreground">soon</span>}
                     </SidebarMenuButton>
                     {!!count && (
                       <SidebarMenuBadge className="rounded-full bg-destructive/10 text-destructive">{count}</SidebarMenuBadge>

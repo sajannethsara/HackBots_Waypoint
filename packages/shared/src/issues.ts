@@ -5,6 +5,8 @@ import { z } from "zod"
 export const ISSUE_TYPES = [
   "LOAD_MISSING",
   "LOAD_DAMAGED",
+  "SEQUENCE_ISSUE",
+  "DEPARTURE_DELAY",
   "CAPACITY_BREACH",
   "LATE_ARRIVAL",
   "DELIVERY_REFUSED",
@@ -59,6 +61,22 @@ export const ISSUE_TYPE_META: Record<IssueType, { label: string; playbook: Issue
     playbook: [
       { id: "replace", label: "Replace damaged items", hint: "Swap from stock before departure" },
       { id: "write-off", label: "Write off and credit", hint: "Record as damaged in warehouse" },
+      notifyStore,
+    ],
+  },
+  SEQUENCE_ISSUE: {
+    label: "Sequence issue",
+    playbook: [
+      { id: "resequence", label: "Reorder the load", hint: "Adjust the loading order to match the delivery sequence" },
+      { id: "verify-manifest", label: "Verify the manifest", hint: "Check each order against its planned stop" },
+      notifyDriver,
+    ],
+  },
+  DEPARTURE_DELAY: {
+    label: "Departure delay",
+    playbook: [
+      { id: "release-after-check", label: "Release after final check", hint: "Complete the remaining loading checks before departure" },
+      notifyDriver,
       notifyStore,
     ],
   },

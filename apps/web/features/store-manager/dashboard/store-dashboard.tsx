@@ -129,9 +129,9 @@ function RecentOrders({ rows }: { rows: StoreOrderRow[] }) {
       <TableHeader>
         <TableRow className="text-xs">
           <TableHead>Order</TableHead>
-          <TableHead>Brand</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead className="text-right">Items</TableHead>
+          <TableHead className="hidden sm:table-cell">Brand</TableHead>
+          <TableHead className="hidden sm:table-cell">Type</TableHead>
+          <TableHead className="hidden text-right sm:table-cell">Items</TableHead>
           <TableHead>Delivery date</TableHead>
           <TableHead>Status</TableHead>
         </TableRow>
@@ -144,13 +144,13 @@ function RecentOrders({ rows }: { rows: StoreOrderRow[] }) {
                 {o.ref}
               </Link>
             </TableCell>
-            <TableCell>
+            <TableCell className="hidden sm:table-cell">
               <BrandBadge brand={o.brand} />
             </TableCell>
-            <TableCell>
+            <TableCell className="hidden sm:table-cell">
               <TempIcon temp={o.temp} />
             </TableCell>
-            <TableCell className="text-right tabular-nums">{o.items}</TableCell>
+            <TableCell className="hidden text-right tabular-nums sm:table-cell">{o.items}</TableCell>
             <TableCell className="tabular-nums">{shortDate(o.deliveryDate)}</TableCell>
             <TableCell>
               <StoreOrderStatus status={o.status} />
@@ -169,7 +169,7 @@ function RecentDeliveries({ rows }: { rows: StoreDeliveryRow[] }) {
         <TableRow className="text-xs">
           <TableHead>Order</TableHead>
           <TableHead>Delivery date</TableHead>
-          <TableHead>Vehicle</TableHead>
+          <TableHead className="hidden sm:table-cell">Vehicle</TableHead>
           <TableHead>Arrival</TableHead>
           <TableHead>Status</TableHead>
         </TableRow>
@@ -185,7 +185,7 @@ function RecentDeliveries({ rows }: { rows: StoreDeliveryRow[] }) {
                 </Link>
               </TableCell>
               <TableCell className="tabular-nums">{shortDate(d.deliveryDate)}</TableCell>
-              <TableCell>{d.vehicleId ?? "—"}</TableCell>
+              <TableCell className="hidden sm:table-cell">{d.vehicleId ?? "—"}</TableCell>
               <TableCell className="tabular-nums">{eta != null ? `${d.etaMin != null ? "ETA " : ""}${minToHHMM(eta)}` : "—"}</TableCell>
               <TableCell>
                 <StoreOrderStatus status={d.status} />

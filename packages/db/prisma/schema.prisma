@@ -160,6 +160,8 @@ enum IssueType {
   LOAD_MISSING
   LOAD_DAMAGED
   CAPACITY_BREACH
+  SEQUENCE_ISSUE
+  DEPARTURE_DELAY
   LATE_ARRIVAL
   DELIVERY_REFUSED
   OUTLET_CLOSED
@@ -188,6 +190,18 @@ enum ReceiptStatus {
   CONFIRMED
   CONFIRMED_WITH_ISSUES
   DISPUTED
+}
+
+enum ChangeKind {
+  WINDOW // receiving window
+  ACCESS // dock type and parking constraint
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
 }
 
 // How the store found a received line
@@ -263,27 +277,71 @@ model District {
 
 // outlets.csv
 model Outlet {
-  id                 String            @id // "OUT001"
+  id                 String                @id // "OUT001"
   name               String
   brand              Brand
   districtId         String
-  district           District          @relation(fields: [districtId], references: [id])
+  district           District              @relation(fields: [districtId], references: [id])
   depotId            String
-  depot              Depot             @relation(fields: [depotId], references: [id])
+  depot              Depot                 @relation(fields: [depotId], references: [id])
   dockType           DockType
   parkingConstraint  ParkingConstraint
   mallWindowOpenMin  Int?
   mallWindowCloseMin Int?
   windowOpenMin      Int
   windowCloseMin     Int
-  lastDeliveredOn    DateTime?         @db.Date // drives "days since last served"
+  lastDeliveredOn    DateTime?             @db.Date // drives "days since last served"
   lat                Float? // map enrichment: deterministic point near the district centre
   lng                Float?
   managers           User[]
   orders             Order[]
   issues             Issue[]
+  profile            OutletProfile?
+  changeRequests     OutletChangeRequest[]
 
   @@index([depotId, brand, districtId])
+}
+
+// What the store tells us about itself. Not part of the datathon CSVs, so it lives beside the outlet.
+model OutletProfile {
+  outletId              String   @id
+  outlet                Outlet   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  address               String?
+  phone                 String?
+  email                 String?
+  tradingOpenMin        Int?
+  tradingCloseMin       Int?
+  floorAreaM2           Int?
+  departments           Json     @default("[]") // [{ name, areaM2 }]: the footprint of each department
+  leadership            Json     @default("[]") // [{ role, name, phone, email }]
+  receivingContactName  String?
+  receivingContactPhone String?
+  receivingStaff        Int?
+  hasForklift           Boolean  @default(false)
+  hasColdRoom           Boolean  @default(false)
+  receivingNotes        String?
+  updatedAt             DateTime @updatedAt @db.Timestamptz
+}
+
+// A store asking for something that changes how it is planned (window, dock, parking). The dispatcher decides.
+model OutletChangeRequest {
+  id            String        @id @default(cuid())
+  outletId      String
+  outlet        Outlet        @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  kind          ChangeKind
+  current       Json
+  proposed      Json
+  reason        String
+  status        RequestStatus @default(PENDING)
+  requestedById String
+  requestedBy   User          @relation("ChangeRequestedBy", fields: [requestedById], references: [id])
+  createdAt     DateTime      @default(now()) @db.Timestamptz
+  decidedById   String?
+  decidedBy     User?         @relation("ChangeDecidedBy", fields: [decidedById], references: [id])
+  decidedAt     DateTime?     @db.Timestamptz
+  decisionNote  String?
+
+  @@index([outletId, status])
 }
 
 // vehicles.csv
@@ -377,6 +435,8 @@ model User {
   plansPublished    Plan[]             @relation("PlanPublishedBy")
   decisionsMade     PlanDecision[]     @relation("DecisionOverriddenBy")
   tripsLoaded       Trip[]             @relation("TripLoadedBy")
+  tripsClaimed      Trip[]             @relation("TripClaimedBy")
+  linesCounted      LoadLine[]         @relation("LoadLineCountedBy")
   tripsDriven       Trip[]             @relation("TripDriver")
   tripsLoading      Trip[]             @relation("TripLoader")
   deliveryEvents    DeliveryEvent[]
@@ -427,6 +487,20 @@ model Order {
   @@index([outletId, deliveryDate])
 }
 
+// The loader's item checklist: units counted onto the truck per order line of a stop.
+// Missing = ordered - loaded - damaged. Keyed by stop, so a re-planned order starts a fresh count.
+model LoadLine {
+  stopId      String
+  stop        Stop      @relation(fields: [stopId], references: [id], onDelete: Cascade)
+  orderLineId String
+  orderLine   OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  loadedQty   Int // good units on the truck
+  damagedQty  Int       @default(0)
+  countedById String
+  countedBy   User      @relation("LoadLineCountedBy", fields: [countedById], references: [id])
+  countedAt   DateTime  @updatedAt @db.Timestamptz
+
+  @@id([stopId, orderLineId])
 // What a store can order. Unit weight/volume are calibrated to each brand's real average per unit.
 model Product {
   id           String          @id @default(cuid())
@@ -459,6 +533,7 @@ model OrderLine {
   deliveryLines DeliveryLine[]
   receiptLines  ReceiptLine[]
   issues        Issue[]
+  loadLines     LoadLine[]
 }
 
 // ─────────────────────────────── Planning ───────────────────────────────
@@ -527,6 +602,9 @@ model Trip {
   loadedAt           DateTime?         @db.Timestamptz
   loadedById         String?
   loadedBy           User?             @relation("TripLoadedBy", fields: [loadedById], references: [id])
+  claimedById        String?
+  claimedBy          User?             @relation("TripClaimedBy", fields: [claimedById], references: [id])
+  claimedAt          DateTime?         @db.Timestamptz
   driverId           String?
   /// Road geometry from Google Routes: { source, legs: [[lat,lng]...][], km, min, computedAt }
   route              Json?
@@ -573,6 +651,7 @@ model Stop {
   proof             ProofOfDelivery?
   events            DeliveryEvent[]
   issues            Issue[]
+  loadLines         LoadLine[]
 
   @@unique([tripId, seq])
   @@index([orderId])
@@ -628,7 +707,8 @@ model MediaAsset {
   kind         MediaKind
   mimeType     String
   sizeBytes    Int
-  data         Bytes // compressed on device; small enough for Postgres
+  data         Bytes // compressed on device; small enough for Postgres. Empty when the file lives in `filePath`.
+  filePath     String? // relative to the uploads folder (see MediaStorage); set for store issue photos
   createdAt    DateTime         @default(now()) @db.Timestamptz
   podSignature ProofOfDelivery? @relation("PodSignature")
   podPhoto     ProofOfDelivery? @relation("PodPhoto")

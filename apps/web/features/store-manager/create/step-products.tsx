@@ -36,22 +36,25 @@ export function StepProducts({
     <div className="grid gap-3">
       <Command shouldFilter={false} className="rounded-lg! border bg-background p-0">
         <CommandInput value={query} onValueChange={setQuery} placeholder="Search products by name, category or code…" aria-label="Search products" />
-        {term && (
-          <CommandList className="max-h-44">
-            <CommandEmpty>No product matches “{query}”.</CommandEmpty>
-            {suggestions.map((p) => {
-              const picked = (draft.qty[p.id] ?? 0) > 0
-              return (
-                <CommandItem key={p.id} value={p.id} data-checked={picked} onSelect={() => onQty(p.id, picked ? 0 : 1)}>
-                  <span className="font-medium">{p.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {p.category.toLowerCase()} · {p.unitLabel}
-                  </span>
-                </CommandItem>
-              )
-            })}
-          </CommandList>
-        )}
+        {/* Always mounted: the search box points at this list, and a missing target is an accessibility error. */}
+        <CommandList className={term ? "max-h-44" : "hidden"}>
+          {term && (
+            <>
+              <CommandEmpty>No product matches “{query}”.</CommandEmpty>
+              {suggestions.map((p) => {
+                const picked = (draft.qty[p.id] ?? 0) > 0
+                return (
+                  <CommandItem key={p.id} value={p.id} data-checked={picked} onSelect={() => onQty(p.id, picked ? 0 : 1)}>
+                    <span className="font-medium">{p.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {p.category.toLowerCase()} · {p.unitLabel}
+                    </span>
+                  </CommandItem>
+                )
+              })}
+            </>
+          )}
+        </CommandList>
       </Command>
 
       <Card size="sm" className="gap-0 py-0">

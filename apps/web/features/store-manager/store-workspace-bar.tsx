@@ -1,13 +1,13 @@
 "use client"
 
-import { Bell, CalendarDays, MapPin, PartyPopper, Wallet } from "lucide-react"
+import { CalendarDays, MapPin, PartyPopper, Wallet } from "lucide-react"
 import { BrandBadge } from "@/components/shared/badges"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { useAppContext, useMe } from "@/hooks/use-session"
 import { fmtDate } from "@/lib/format"
+import { NotificationBell } from "./notifications/notification-bell"
 
 /** Sticky top bar: sidebar toggle, operating day and the outlet this manager is scoped to. */
 export function StoreWorkspaceBar() {
@@ -21,7 +21,10 @@ export function StoreWorkspaceBar() {
       <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
       <div className="flex h-7 items-center gap-2 rounded-md border px-2.5 text-sm">
         <CalendarDays className="size-3.5 text-muted-foreground" />
-        <span className="font-medium tabular-nums">{ctx ? fmtDate(ctx.operatingDate) : "—"}</span>
+        <span className="font-medium whitespace-nowrap tabular-nums">
+          <span className="sm:hidden">{ctx ? fmtDate(ctx.operatingDate, { day: "numeric", month: "short" }) : "—"}</span>
+          <span className="hidden sm:inline">{ctx ? fmtDate(ctx.operatingDate) : "—"}</span>
+        </span>
       </div>
       <div className="flex h-7 min-w-0 items-center gap-2 rounded-md border px-2.5 text-sm">
         <MapPin className="size-3.5 shrink-0 text-muted-foreground" />
@@ -46,9 +49,7 @@ export function StoreWorkspaceBar() {
         )}
       </div>
       <div className="ml-auto flex items-center gap-1">
-        <Button variant="ghost" size="icon-sm" aria-label="Notifications">
-          <Bell />
-        </Button>
+        <NotificationBell />
       </div>
     </header>
   )

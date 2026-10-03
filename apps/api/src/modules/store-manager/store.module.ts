@@ -1,14 +1,35 @@
-import { Body, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, Patch, Post, Query } from "@nestjs/common"
+import { Body, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, Patch, Post, Put, Query } from "@nestjs/common"
 import type { Prisma } from "@waypoint/db"
+import { z } from "zod"
 import {
   cancelStoreOrderSchema,
+  changeRequestSchema,
+  decideRequestSchema,
   createStoreOrderSchema,
+  driverMediaSchema,
+  updateAboutSchema,
+  updateLeadershipSchema,
+  updateNotificationPrefsSchema,
+  updateReceivingSchema,
+  receiveDeliverySchema,
+  reportStoreIssueSchema,
+  storeDeliveriesQuerySchema,
   dateOnly,
   storeOrdersQuerySchema,
   updateStoreOrderSchema,
   toDateOnly,
   type CancelStoreOrderInput,
+  type ChangeRequestInput,
+  type DecideRequestInput,
+  type NotificationPrefs,
+  type UpdateAboutInput,
+  type UpdateLeadershipInput,
+  type UpdateReceivingInput,
   type CreateStoreOrderInput,
+  type DriverMediaInput,
+  type ReceiveDeliveryInput,
+  type ReportStoreIssueInput,
+  type StoreDeliveriesQuery,
   type StoreCancelReason,
   type StoreDashboard,
   type StoreOrderDetail,
@@ -22,8 +43,16 @@ import {
 import { CurrentUser, Roles, type SessionUser } from "../../common/auth"
 import { PrismaService } from "../../common/prisma.service"
 import { ZodPipe } from "../../common/zod.pipe"
+import { IssuesModule } from "../issues/issues.module"
+import { LiveModule } from "../live/live.module"
+import { MediaModule } from "../media/media.module"
 import { PlanningModule } from "../planning/planning.module"
+import { StoreLiveService } from "./store-live.service"
+import { StoreProfileService } from "./store-profile.service"
 import { StoreOrderingService } from "./store-ordering.service"
+import { StoreReceivingService } from "./store-receiving.service"
+
+const markReadSchema = z.object({ ids: z.array(z.string()).max(100).optional() })
 
 const TAB_WHERE: Record<StoreOrderTab, Prisma.OrderWhereInput> = {
   orders: { status: { notIn: ["DRAFT", "CANCELLED"] } },
@@ -215,6 +244,9 @@ export class StoreController {
   constructor(
     private readonly store: StoreService,
     private readonly ordering: StoreOrderingService,
+    private readonly receiving: StoreReceivingService,
+    private readonly liveTracking: StoreLiveService,
+    private readonly profile: StoreProfileService,
   ) {}
 
   @Get("dashboard")
@@ -225,6 +257,96 @@ export class StoreController {
   @Get("orders")
   orders(@CurrentUser() user: SessionUser, @Query(new ZodPipe(storeOrdersQuerySchema)) q: StoreOrdersQuery) {
     return this.store.orders(user, q)
+  }
+
+  @Get("deliveries")
+  deliveries(@CurrentUser() user: SessionUser, @Query(new ZodPipe(storeDeliveriesQuerySchema)) q: StoreDeliveriesQuery) {
+    return this.receiving.deliveries(user, q)
+  }
+
+  @Get("profile")
+  getProfile(@CurrentUser() user: SessionUser) {
+    return this.profile.profile(user)
+  }
+
+  @Put("profile/about")
+  putAbout(@CurrentUser() user: SessionUser, @Body(new ZodPipe(updateAboutSchema)) body: UpdateAboutInput) {
+    return this.profile.updateAbout(user, body)
+  }
+
+  @Put("profile/leadership")
+  putLeadership(@CurrentUser() user: SessionUser, @Body(new ZodPipe(updateLeadershipSchema)) body: UpdateLeadershipInput) {
+    return this.profile.updateLeadership(user, body)
+  }
+
+  @Put("profile/receiving")
+  putReceiving(@CurrentUser() user: SessionUser, @Body(new ZodPipe(updateReceivingSchema)) body: UpdateReceivingInput) {
+    return this.profile.updateReceiving(user, body)
+  }
+
+  @Post("profile/change-requests")
+  requestChange(@CurrentUser() user: SessionUser, @Body(new ZodPipe(changeRequestSchema)) body: ChangeRequestInput) {
+    return this.profile.requestChange(user, body)
+  }
+
+  @Post("profile/change-requests/:id/cancel")
+  cancelRequest(@CurrentUser() user: SessionUser, @Param("id") id: string) {
+    return this.profile.cancelRequest(user, id)
+  }
+
+  @Get("settings")
+  settings(@CurrentUser() user: SessionUser) {
+    return this.profile.settings(user)
+  }
+
+  @Put("settings/notifications")
+  putPrefs(@CurrentUser() user: SessionUser, @Body(new ZodPipe(updateNotificationPrefsSchema)) body: NotificationPrefs) {
+    return this.profile.updatePrefs(user, body)
+  }
+
+  @Get("notifications")
+  notifications(@CurrentUser() user: SessionUser) {
+    return this.profile.notifications(user)
+  }
+
+  @Post("notifications/read")
+  markRead(@CurrentUser() user: SessionUser, @Body(new ZodPipe(markReadSchema)) body: { ids?: string[] }) {
+    return this.profile.markRead(user, body.ids)
+  }
+
+  @Get("orders/:id/live")
+  live(@CurrentUser() user: SessionUser, @Param("id") id: string) {
+    return this.liveTracking.view(user, id)
+  }
+
+  @Get("orders/:id/receiving")
+  receivingDetail(@CurrentUser() user: SessionUser, @Param("id") id: string) {
+    return this.receiving.receiving(user, id)
+  }
+
+  @Post("orders/:id/receipt")
+  receive(@CurrentUser() user: SessionUser, @Param("id") id: string, @Body(new ZodPipe(receiveDeliverySchema)) body: ReceiveDeliveryInput) {
+    return this.receiving.receive(user, id, body)
+  }
+
+  @Post("orders/:id/issues")
+  reportIssue(@CurrentUser() user: SessionUser, @Param("id") id: string, @Body(new ZodPipe(reportStoreIssueSchema)) body: ReportStoreIssueInput) {
+    return this.receiving.reportIssue(user, id, body)
+  }
+
+  @Post("media")
+  media(@CurrentUser() user: SessionUser, @Body(new ZodPipe(driverMediaSchema)) body: DriverMediaInput) {
+    return this.receiving.saveMedia(user, body)
+  }
+
+  @Get("issues")
+  issues(@CurrentUser() user: SessionUser, @Query("status") status?: string) {
+    return this.receiving.issueList(user, status)
+  }
+
+  @Get("issues/:id")
+  issue(@CurrentUser() user: SessionUser, @Param("id") id: string) {
+    return this.receiving.issue(user, id)
   }
 
   @Get("order-rules")
@@ -258,5 +380,25 @@ export class StoreController {
   }
 }
 
-@Module({ imports: [PlanningModule], controllers: [StoreController], providers: [StoreService, StoreOrderingService] })
+/**
+ * The dispatcher's half of the outlet change requests. API only for now: the dispatcher app can build its screen
+ * on these two endpoints without touching anything on the store side.
+ */
+@Roles("DISPATCHER")
+@Controller("outlet-requests")
+export class OutletRequestsController {
+  constructor(private readonly profile: StoreProfileService) {}
+
+  @Get()
+  list(@CurrentUser() user: SessionUser, @Query("status") status?: string) {
+    return this.profile.listRequests(user, status)
+  }
+
+  @Post(":id/decide")
+  decide(@CurrentUser() user: SessionUser, @Param("id") id: string, @Body(new ZodPipe(decideRequestSchema)) body: DecideRequestInput) {
+    return this.profile.decide(user, id, body)
+  }
+}
+
+@Module({ imports: [PlanningModule, IssuesModule, LiveModule, MediaModule], controllers: [StoreController, OutletRequestsController], providers: [StoreService, StoreOrderingService, StoreReceivingService, StoreLiveService, StoreProfileService] })
 export class StoreModule {}

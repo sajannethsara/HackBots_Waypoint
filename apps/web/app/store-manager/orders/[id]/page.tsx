@@ -1,6 +1,8 @@
 import { StoreOrderDetailPage } from "@/features/store-manager/orders/store-order-detail-page"
 
+export const dynamic = "force-dynamic"
+
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  return <StoreOrderDetailPage id={id} />
+  return <StoreOrderDetailPage id={id} mapboxToken={process.env.MAPBOX_ACCESS_TOKEN || undefined} />
 }
