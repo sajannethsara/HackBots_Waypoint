@@ -37,7 +37,7 @@ export function OnTheWayCard({ d, mapboxToken }: { d: StoreOnTheWay; mapboxToken
           <CardTitle className="flex items-center gap-2">
             <Truck className="size-4" /> {HEADLINE[d.stage]}
             {d.live && (
-              <span className="flex items-center gap-1 text-[11px] font-normal text-emerald-600">
+              <span className="flex items-center gap-1 text-[11px] font-normal text-emerald-700 dark:text-emerald-400">
                 <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" /> Live
               </span>
             )}

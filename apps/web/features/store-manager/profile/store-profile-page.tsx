@@ -48,7 +48,7 @@ export function StoreProfilePage() {
         title="Outlet profile"
         description={
           <span className="flex flex-wrap items-center gap-2">
-            {o.name} <BrandBadge brand={o.brand} /> <span>· {o.district} · served from {o.depot.name}</span>
+            <span className="font-medium text-foreground">{o.name}</span> <BrandBadge brand={o.brand} /> <span>{o.district} · served from {o.depot.name}</span>
           </span>
         }
         actions={

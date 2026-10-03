@@ -29,9 +29,9 @@ export function TrackPanel({ orderId, mapboxToken, defaultOpen = true }: { order
     <div className="grid gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="flex items-center gap-1.5 text-sm font-medium">
+          <h2 className="flex items-center gap-1.5 text-sm font-medium">
             <MapIcon className="size-4" /> Live location
-          </h3>
+          </h2>
           {open && view && <Freshness view={view} />}
         </div>
         <Button size="xs" variant="outline" onClick={() => setOpen((o) => !o)} aria-expanded={open}>

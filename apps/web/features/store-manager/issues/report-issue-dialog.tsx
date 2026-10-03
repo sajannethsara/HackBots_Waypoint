@@ -138,7 +138,7 @@ function ReportFlow({ order, onClose }: { order: IssueTarget; onClose: () => voi
             <Skeleton className="h-8 w-full" />
           ) : (
             <Select value={lineId} onValueChange={(v) => setLineId(String(v))}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="w-full" aria-label="Which item">
                 <SelectValue>{(v: string) => (v === WHOLE ? "The whole order" : (detail.lines.find((l) => l.orderLineId === v)?.description ?? "The whole order"))}</SelectValue>
               </SelectTrigger>
               <SelectContent>

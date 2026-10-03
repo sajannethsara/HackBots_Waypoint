@@ -153,10 +153,10 @@ function DeliveriesTable({ rows, onOpen, onReport }: { rows: StoreDeliveryItem[]
       <TableHeader>
         <TableRow className="text-xs">
           <TableHead className="pl-4">Order</TableHead>
-          <TableHead>Date</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead className="text-right">Units</TableHead>
-          <TableHead>Vehicle</TableHead>
+          <TableHead className="hidden sm:table-cell">Date</TableHead>
+          <TableHead className="hidden md:table-cell">Type</TableHead>
+          <TableHead className="hidden text-right md:table-cell">Units</TableHead>
+          <TableHead className="hidden sm:table-cell">Vehicle</TableHead>
           <TableHead>Arrival</TableHead>
           <TableHead>Status</TableHead>
           <TableHead className="pr-4 text-right">
@@ -175,12 +175,12 @@ function DeliveriesTable({ rows, onOpen, onReport }: { rows: StoreDeliveryItem[]
                   {d.orderRef}
                 </Link>
               </TableCell>
-              <TableCell className="tabular-nums">{shortDate(d.deliveryDate)}</TableCell>
-              <TableCell>
+              <TableCell className="hidden tabular-nums sm:table-cell">{shortDate(d.deliveryDate)}</TableCell>
+              <TableCell className="hidden md:table-cell">
                 <TempIcon temp={d.temp} />
               </TableCell>
-              <TableCell className="text-right tabular-nums">{d.units}</TableCell>
-              <TableCell>
+              <TableCell className="hidden text-right tabular-nums md:table-cell">{d.units}</TableCell>
+              <TableCell className="hidden sm:table-cell">
                 {d.vehicleId ?? "—"}
                 {d.driverName && <span className="block text-xs text-muted-foreground">{d.driverName}</span>}
               </TableCell>

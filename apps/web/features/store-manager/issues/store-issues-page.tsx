@@ -65,10 +65,10 @@ export function StoreIssuesPage() {
               <TableRow className="text-xs">
                 <TableHead className="pl-4">Issue</TableHead>
                 <TableHead>Problem</TableHead>
-                <TableHead>Order</TableHead>
-                <TableHead>Severity</TableHead>
+                <TableHead className="hidden sm:table-cell">Order</TableHead>
+                <TableHead className="hidden sm:table-cell">Severity</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="pr-4">Reported</TableHead>
+                <TableHead className="hidden pr-4 sm:table-cell">Reported</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -83,7 +83,7 @@ export function StoreIssuesPage() {
                     {ISSUE_TYPE_META[i.type as IssueType]?.label ?? i.type}
                     {i.quantity != null && <span className="text-xs text-muted-foreground"> · {i.quantity} units</span>}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden sm:table-cell">
                     {i.orderId ? (
                       <Link href={`/store-manager/orders/${i.orderId}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
                         {i.orderRef}
@@ -92,13 +92,13 @@ export function StoreIssuesPage() {
                       "—"
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden sm:table-cell">
                     <SeverityBadge severity={i.severity as IssueSeverity} />
                   </TableCell>
                   <TableCell>
                     <IssueStatusBadge status={i.status as IssueStatus} />
                   </TableCell>
-                  <TableCell className="pr-4 text-xs text-muted-foreground">{timeAgo(i.createdAt)}</TableCell>
+                  <TableCell className="hidden pr-4 text-xs text-muted-foreground sm:table-cell">{timeAgo(i.createdAt)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

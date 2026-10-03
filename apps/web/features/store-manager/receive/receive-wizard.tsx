@@ -186,7 +186,47 @@ function VerifyStep({ detail, counts, onChange }: { detail: StoreReceivingDetail
         <AlertTitle>Count each item</AlertTitle>
         <AlertDescription>Quantities start as delivered. Lower the number for anything missing, and mark anything that arrived in poor condition.</AlertDescription>
       </Alert>
-      <Card size="sm" className="gap-0 py-0">
+
+      {/* Phones: one card per item, so nothing is hidden off to the side. */}
+      <ul className="grid gap-2 sm:hidden">
+        {detail.lines.map((l) => {
+          const c = counts[l.orderLineId]
+          if (!c) return null
+          const short = l.expectedQty - c.received
+          const bad = problemOf(l.expectedQty, c)
+          return (
+            <li key={l.orderLineId} className={cn("grid gap-3 rounded-xl border bg-card p-3", bad && "border-amber-300/70 bg-amber-50/70 dark:bg-amber-500/10")}>
+              <div>
+                <p className="font-medium">{l.description}</p>
+                <p className="text-xs text-muted-foreground">
+                  <span className="capitalize">{l.category.toLowerCase()}</span> · ordered {l.orderedQty} · driver delivered {l.expectedQty}
+                </p>
+                {l.refusedQty > 0 && <p className="text-xs text-red-700 dark:text-red-400">Driver recorded {l.refusedQty} refused{l.reason ? `: ${l.reason}` : ""}</p>}
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm">You received</span>
+                <QuantityInput value={c.received} min={0} max={l.expectedQty} disabled={l.expectedQty === 0} label={`${l.description} received`} onChange={(n) => onChange(l.orderLineId, { received: n })} />
+              </div>
+              {short > 0 && <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{short} short</p>}
+              <Select value={c.condition} onValueChange={(v) => onChange(l.orderLineId, { condition: v as LineCondition })}>
+                <SelectTrigger className="w-full" aria-label={`${l.description} condition`}>
+                  <SelectValue>{(v: string) => LINE_CONDITION_LABEL[v as LineCondition]}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {LINE_CONDITIONS.map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {LINE_CONDITION_LABEL[k]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {bad && <Input value={c.notes} maxLength={200} onChange={(e) => onChange(l.orderLineId, { notes: e.target.value })} placeholder="Note (optional)" aria-label={`${l.description} note`} />}
+            </li>
+          )
+        })}
+      </ul>
+
+      <Card size="sm" className="hidden gap-0 py-0 sm:block">
         <Table>
           <TableHeader>
             <TableRow className="text-xs">
@@ -262,7 +302,7 @@ function ReviewStep({ detail, counts, sums }: { detail: StoreReceivingDetail; co
               <TableHead className="text-right">Delivered</TableHead>
               <TableHead className="text-right">Received</TableHead>
               <TableHead className="text-right">Difference</TableHead>
-              <TableHead className="pr-4">Condition</TableHead>
+              <TableHead className="hidden pr-4 sm:table-cell">Condition</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -272,11 +312,14 @@ function ReviewStep({ detail, counts, sums }: { detail: StoreReceivingDetail; co
               const diff = c.received - l.expectedQty
               return (
                 <TableRow key={l.orderLineId} className={cn(problemOf(l.expectedQty, c) && "bg-amber-50/70 dark:bg-amber-500/10")}>
-                  <TableCell className="pl-4 font-medium">{l.description}</TableCell>
+                  <TableCell className="pl-4">
+                    <p className="font-medium">{l.description}</p>
+                    {c.condition !== "GOOD" && <p className="text-xs text-muted-foreground sm:hidden">{LINE_CONDITION_LABEL[c.condition]}</p>}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{l.expectedQty}</TableCell>
                   <TableCell className="text-right tabular-nums">{c.received}</TableCell>
                   <TableCell className={cn("text-right tabular-nums", diff < 0 && "font-medium text-red-600")}>{diff === 0 ? "—" : diff}</TableCell>
-                  <TableCell className="pr-4">{LINE_CONDITION_LABEL[c.condition]}</TableCell>
+                  <TableCell className="hidden pr-4 sm:table-cell">{LINE_CONDITION_LABEL[c.condition]}</TableCell>
                 </TableRow>
               )
             })}

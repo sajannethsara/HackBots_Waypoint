@@ -41,7 +41,7 @@ export function NotificationBell() {
           </span>
         )}
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[360px] max-w-[calc(100vw-1.5rem)] gap-0 p-0">
+      <PopoverContent align="end" aria-label="Notifications" className="w-[360px] max-w-[calc(100vw-1.5rem)] gap-0 p-0">
         <div className="flex items-center justify-between border-b px-3 py-2">
           <p className="text-sm font-medium">Notifications</p>
           <Button variant="ghost" size="xs" disabled={unread === 0 || mark.isPending} onClick={() => mark.mutate(undefined)}>
