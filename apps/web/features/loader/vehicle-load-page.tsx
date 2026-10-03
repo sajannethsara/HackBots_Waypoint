@@ -19,7 +19,7 @@ import { ApiError } from "@/lib/api"
 import { fmtNum } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { CapacityBreachModal } from "./capacity-breach-modal"
-import { cargoSpec, claimState, destination, loadingOrder, statusPill, stopIssues, stowedLoad, unfinishedStops, type ClaimState } from "./model"
+import { canUnclaim, cargoSpec, claimState, destination, loadingOrder, statusPill, stopIssues, stowedLoad, unfinishedStops, type ClaimState } from "./model"
 import { blockingStops, confirmFailure, useClaimTrip, useCompleteTrip, useConfirmStop, useLoaderTrip, useUnclaimTrip } from "./queries"
 import { ReportIssueDialog } from "./report-issue-dialog"
 
@@ -172,7 +172,7 @@ function LoadList({ trip, state, depotName, onRefresh, refreshing }: { trip: Loa
       {!inactive && state !== "mine" && <ReadOnlyNotice trip={trip} state={state} onClaim={onClaim} claiming={claim.isPending} />}
 
       <Card className="gap-3 p-4">
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="@container grid gap-3 @2xl:grid-cols-2">
           <Capacity icon={Weight} title="Gross payload weight" unit="kg" digits={0} loaded={load.weightKg} cap={trip.vehicle.weightCapKg} planned={trip.loadWeightKg} />
           <Capacity icon={Box} title="Volumetric stowage" unit="m³" digits={1} loaded={load.volumeM3} cap={trip.vehicle.volumeCapM3} planned={trip.loadVolumeM3} />
         </div>
@@ -223,7 +223,7 @@ function LoadList({ trip, state, depotName, onRefresh, refreshing }: { trip: Loa
 
       {canLoad && (
         // Sticky so finishing is always in reach, however long the loading sequence is.
-        <Card className="sticky bottom-3 z-10 flex-row flex-wrap items-center gap-4 px-4 py-3 shadow-lg ring-1 ring-primary/20">
+        <Card className="sticky bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-10 flex-row flex-wrap items-center gap-4 px-4 py-3 shadow-lg ring-1 ring-primary/20">
           <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset", unfinished.length ? TONE.gray : TONE.green)}>
             <PackageCheck className="size-5" />
           </span>
@@ -237,9 +237,11 @@ function LoadList({ trip, state, depotName, onRefresh, refreshing }: { trip: Loa
                 : " · ready to hand over to the driver"}
             </p>
           </div>
-          <Button variant="ghost" onClick={onUnclaim} disabled={unclaim.isPending || complete.isPending}>
-            <Undo2 /> {unclaim.isPending ? "Unclaiming…" : "Unclaim"}
-          </Button>
+          {canUnclaim(trip) && (
+            <Button variant="ghost" onClick={onUnclaim} disabled={unclaim.isPending || complete.isPending}>
+              <Undo2 /> {unclaim.isPending ? "Unclaiming…" : "Unclaim"}
+            </Button>
+          )}
           <Button onClick={onFinish} disabled={unfinished.length > 0 || complete.isPending}>
             {complete.isPending ? "Finishing…" : "Finish loading & release"} <ArrowRight />
           </Button>
@@ -432,7 +434,7 @@ function StopRow({
         </Button>
         <label
           className={cn(
-            "flex h-8 w-44 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium",
+            "flex h-8 w-44 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium pointer-coarse:h-11",
             stowed ? cn("ring-1 ring-inset", TONE.green, "border-transparent") : canLoad ? "cursor-pointer hover:bg-muted" : "text-muted-foreground",
           )}
         >

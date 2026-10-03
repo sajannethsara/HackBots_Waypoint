@@ -23,6 +23,10 @@ export interface NavItem {
   icon: LucideIcon
   badgeKey?: "exceptions" | "issues" | "inbox" | "flagged"
   soon?: boolean
+  /** Sub-links shown under the item (the parent link is also its first destination). */
+  children?: { title: string; href: string }[]
+  /** Other path prefixes that belong to this item (it stays highlighted there). */
+  match?: string[]
 }
 export interface NavGroup {
   label: string
@@ -74,8 +78,8 @@ export const NAV: Record<Role, NavGroup[]> = {
     {
       label: "Loading",
       items: [
-        { title: "Dashboard", href: "/loader/dashboard", icon: LayoutDashboard, soon: true },
-        { title: "Loading Queue", href: "/loader/queue", icon: Archive, badgeKey: "flagged" },
+        { title: "Dashboard", href: "/loader/dashboard", icon: LayoutDashboard },
+        { title: "Loading Queue", href: "/loader/queue", icon: Archive, badgeKey: "flagged", match: ["/loader/vehicles"] },
         { title: "My Loaded Vehicles", href: "/loader/loaded", icon: CircleCheck, soon: true },
       ],
     },

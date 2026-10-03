@@ -1,25 +1,22 @@
 "use client"
 
-import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useMemo, useState } from "react"
-import { ArrowRight, Clock, Lock, MapPin, Package, Play, Search, Snowflake, TriangleAlert, Undo2, type LucideIcon } from "lucide-react"
-import { toast } from "sonner"
+import { Clock, Lock, MapPin, Package, Search, Snowflake, TriangleAlert, type LucideIcon } from "lucide-react"
 import { minToHHMM, type LoaderQueueFilter, type LoaderTrip } from "@waypoint/shared"
 import { BrandBadge, TagBadge, TONE } from "@/components/shared/badges"
 import { PageHeader } from "@/components/shared/page-header"
-import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useMe } from "@/hooks/use-session"
-import { ApiError } from "@/lib/api"
 import { fmtKg, fmtM3 } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { cargoSpec, claimState, destination, isFlagged, statusPill, stowedLoad, type ClaimState } from "./model"
-import { useClaimTrip, useLoaderQueue, useUnclaimTrip } from "./queries"
+import { useLoaderQueue } from "./queries"
+import { TripActions } from "./trip-actions"
 
 type Tab = "all" | "mine" | "unclaimed" | "locked" | "flagged"
 const TABS: { id: Tab; label: string }[] = [
@@ -65,7 +62,8 @@ export function LoaderQueuePage() {
   const setTab = (t: Tab) => router.replace(t === "all" ? pathname : `${pathname}?tab=${t}`, { scroll: false })
 
   return (
-    <div className="grid gap-4">
+    // Two columns only when the content area (not the screen) has room: a landscape tablet with the sidebar open gets one.
+    <div className="@container grid gap-4">
       <PageHeader title="Loading Queue" description="Vehicles on today's published plan at your depot, ready for loading and dock staging." />
 
       <Card className="flex-row flex-wrap items-center gap-3 px-3 py-2">
@@ -88,7 +86,7 @@ export function LoaderQueuePage() {
       </Card>
 
       {filtered.isLoading ? (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 @4xl:grid-cols-2">
           {[0, 1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-56 rounded-xl" />
           ))}
@@ -102,7 +100,7 @@ export function LoaderQueuePage() {
           description={q ? "Try a vehicle ID, trip ref or outlet name." : EMPTY[tab].description}
         />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 @4xl:grid-cols-2">
           {trips.map((t) => (
             <TripCard key={t.id} trip={t} state={claimState(t, me?.id)} />
           ))}
@@ -135,27 +133,9 @@ function QueueEmpty({ icon: Icon, title, description }: { icon: LucideIcon; titl
 }
 
 function TripCard({ trip, state }: { trip: LoaderTrip; state: ClaimState }) {
-  const router = useRouter()
-  const claim = useClaimTrip()
-  const unclaim = useUnclaimTrip()
   const pill = statusPill(trip, state)
   const flagged = isFlagged(trip)
   const load = stowedLoad(trip)
-  const open = () => router.push(`/loader/vehicles/${trip.id}`)
-
-  const onClaim = () =>
-    claim.mutate(trip.id, {
-      onSuccess: open,
-      onError: (err) =>
-        toast.error(err instanceof ApiError && err.status === 409 ? `${trip.vehicle.id} was just claimed by another loader` : err.message, {
-          description: err instanceof ApiError && err.status === 409 ? "The queue has been refreshed." : undefined,
-        }),
-    })
-  const onUnclaim = () =>
-    unclaim.mutate(trip.id, {
-      onSuccess: () => toast.success(`${trip.vehicle.id} unclaimed and back in the queue`),
-      onError: (err) => toast.error(err.message),
-    })
 
   return (
     <Card className={cn("gap-0 p-0", state === "locked" && "bg-muted/40")}>
@@ -206,38 +186,7 @@ function TripCard({ trip, state }: { trip: LoaderTrip; state: ClaimState }) {
           {state === "locked" && `Loading by ${trip.claimedBy?.name ?? "another loader"}`}
           {state === "done" && pill.label}
         </p>
-        <div className="flex items-center gap-2">
-          {flagged && (
-            <Button variant="destructive" size="sm" render={<Link href="/loader/inbox?view=issues" />}>
-              <TriangleAlert /> View issue
-            </Button>
-          )}
-          {state === "unclaimed" && (
-            <Button variant="outline" size="sm" onClick={onClaim} disabled={claim.isPending}>
-              <Play /> {claim.isPending ? "Claiming…" : "Start loading"}
-            </Button>
-          )}
-          {state === "mine" && (
-            <>
-              <Button variant="ghost" size="sm" onClick={onUnclaim} disabled={unclaim.isPending}>
-                <Undo2 /> {unclaim.isPending ? "Unclaiming…" : "Unclaim"}
-              </Button>
-              <Button size="sm" onClick={open}>
-                Continue loading <ArrowRight />
-              </Button>
-            </>
-          )}
-          {state === "locked" && (
-            <Button variant="outline" size="sm" disabled>
-              <Lock /> In progress
-            </Button>
-          )}
-          {trip.status === "LOADED" && (
-            <Button variant="outline" size="sm" render={<Link href={`/loader/vehicles/${trip.id}/released`} />}>
-              Receipt <ArrowRight />
-            </Button>
-          )}
-        </div>
+        <TripActions trip={trip} state={state} />
       </div>
     </Card>
   )

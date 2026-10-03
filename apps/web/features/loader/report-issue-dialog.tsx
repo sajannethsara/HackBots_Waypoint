@@ -16,6 +16,7 @@ import { fmtNum } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { loadingOrder } from "./model"
 import { sentMessage, useReportIssue } from "./queries"
+import { TOUCH, TOUCH_MENU } from "./touch"
 
 type Kind = Exclude<LoaderIssueInput["kind"], "capacity">
 
@@ -117,7 +118,7 @@ export function ReportIssueDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90svh] gap-4 overflow-y-auto sm:max-w-2xl">
+      <DialogContent className={cn("max-h-[90svh] gap-4 overflow-y-auto sm:max-w-2xl", TOUCH)}>
         <DialogHeader className="flex-row items-start gap-3">
           <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset", TONE.red)}>
             <TriangleAlert className="size-5" />
@@ -172,7 +173,7 @@ export function ReportIssueDialog({
                   }}
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className={TOUCH_MENU}>
                 {sequence.map((s, i) => (
                   <SelectItem key={s.id} value={s.id}>
                     SEQ #{i + 1} · {s.order.ref} · {s.outlet.name}
@@ -249,7 +250,7 @@ export function ReportIssueDialog({
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className={TOUCH_MENU}>
                   {DELAY_REASONS.map((r) => (
                     <SelectItem key={r} value={r}>
                       {r}

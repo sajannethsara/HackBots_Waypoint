@@ -159,14 +159,24 @@ export class LoaderService {
     return this.getTripDetail(result.id)
   }
 
-  /** Hand a claimed trip back to the queue. Only the loader holding it can. */
+  /**
+   * Hand a claimed trip back to the queue. Only the loader holding it can, and only before anything
+   * is stowed: a half-loaded truck must be finished (or its stops reported), never abandoned. The trip
+   * row is locked first, so an unclaim cannot slip past a confirm that is still being written.
+   */
   async unclaimTrip(user: SessionUser, tripId: string) {
     const result = await this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${tripId} FOR UPDATE`
       const updated = await tx.trip.updateMany({
-        where: { id: tripId, claimedById: user.sub, status: "LOADING" },
+        where: { id: tripId, claimedById: user.sub, status: "LOADING", stops: { none: { loadStatus: "STOWED" } } },
         data: { claimedById: null, claimedAt: null, status: "PLANNED" },
       })
-      if (updated.count === 0) throw new ForbiddenException("You do not have this trip claimed")
+      if (updated.count === 0) {
+        // Say why: held by me but already part-loaded, or not mine to give back.
+        const stowed = await tx.stop.count({ where: { tripId, loadStatus: "STOWED", trip: { claimedById: user.sub, status: "LOADING" } } })
+        if (stowed) throw new ConflictException(`${stowed} ${stowed === 1 ? "stop is" : "stops are"} already stowed: finish loading or report the remaining stops instead`)
+        throw new ForbiddenException("You do not have this trip claimed")
+      }
       await tx.auditLog.create({
         data: {
           actorId: user.sub,

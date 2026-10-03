@@ -11,6 +11,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { fmtNum } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { sentMessage, useReportIssue } from "./queries"
+import { TOUCH } from "./touch"
 
 
 const RESOLUTIONS: { id: CapacityResolution; title: string; hint: string; tag: string }[] = [
@@ -57,7 +58,7 @@ export function CapacityBreachModal({
 
   return (
     <Dialog open={!!breach} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-4 sm:max-w-2xl">
+      <DialogContent className={cn("max-h-[90svh] gap-4 overflow-y-auto sm:max-w-2xl", TOUCH)}>
         {breach && (
           <>
             <DialogHeader className="flex-row items-start gap-3">

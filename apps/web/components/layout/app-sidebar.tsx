@@ -38,7 +38,13 @@ export function AppSidebar({ role, badges = {} }: { role: Role; badges?: Partial
   const { data: me } = useMe()
   const logout = useLogout()
   const { resolvedTheme, setTheme } = useTheme()
-  const isActive = (href: string) => (href.split("/").length <= 2 ? pathname === href : pathname.startsWith(href))
+  const isActive = (href: string, match: string[] = []) =>
+    (href.split("/").length <= 2 ? pathname === href : pathname.startsWith(href)) || match.some((m) => pathname.startsWith(m))
+  // Sub-links: the most specific one that matches wins, so "/orders/new" does not also light up "/orders".
+  const activeChild = (children: { href: string }[]) =>
+    children
+      .filter((c) => pathname === c.href || pathname.startsWith(`${c.href}/`))
+      .sort((a, b) => b.href.length - a.href.length)[0]?.href
 
   return (
     <Sidebar collapsible="icon">
@@ -55,7 +61,7 @@ export function AppSidebar({ role, badges = {} }: { role: Role; badges?: Partial
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
-                      isActive={isActive(item.href)}
+                      isActive={item.children ? Boolean(current) : isActive(item.href, item.match)}
                       tooltip={item.title}
                       render={<Link href={item.href} />}
                       className="data-active:font-medium"

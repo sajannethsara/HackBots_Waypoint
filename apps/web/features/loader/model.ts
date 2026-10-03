@@ -52,3 +52,6 @@ export function unfinishedStops(trip: LoaderTrip) {
 
 /** Open issues raised against one stop. */
 export const stopIssues = (trip: LoaderTrip, stopId: string) => trip.issues.filter((i) => i.stopId === stopId)
+
+/** Once anything is on the truck the loader must finish (or report) it: unclaiming is no longer offered. */
+export const canUnclaim = (trip: LoaderTrip) => !trip.stops.some((s) => s.loadStatus === "STOWED")
