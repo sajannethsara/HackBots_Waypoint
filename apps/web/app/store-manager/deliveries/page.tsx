@@ -1,6 +1,10 @@
-import { Truck } from "lucide-react"
-import { SectionPlaceholder } from "@/features/store-manager/shared/section-placeholder"
+import { Suspense } from "react"
+import { StoreDeliveriesPage } from "@/features/store-manager/deliveries/store-deliveries-page"
 
 export default function Page() {
-  return <SectionPlaceholder title="Deliveries" description="Track upcoming deliveries and receive stock." icon={Truck} note="Delivery tracking and receiving arrive in a later phase." />
+  return (
+    <Suspense>
+      <StoreDeliveriesPage />
+    </Suspense>
+  )
 }

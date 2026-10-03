@@ -620,7 +620,8 @@ model MediaAsset {
   kind         MediaKind
   mimeType     String
   sizeBytes    Int
-  data         Bytes // compressed on device; small enough for Postgres
+  data         Bytes // compressed on device; small enough for Postgres. Empty when the file lives in `filePath`.
+  filePath     String? // relative to the uploads folder (see MediaStorage); set for store issue photos
   createdAt    DateTime         @default(now()) @db.Timestamptz
   podSignature ProofOfDelivery? @relation("PodSignature")
   podPhoto     ProofOfDelivery? @relation("PodPhoto")

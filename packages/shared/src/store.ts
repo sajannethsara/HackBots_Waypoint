@@ -172,3 +172,174 @@ export type CancelStoreOrderInput = z.infer<typeof cancelStoreOrderSchema>
 
 /** The one format for order references the system hands out: ORD-0000123. (S1-… refs belong to the challenge scenario.) */
 export const formatOrderRef = (n: number) => `ORD-${String(n).padStart(7, "0")}`
+
+// ───────────────────────────── Deliveries ─────────────────────────────
+
+export const STORE_DELIVERY_TABS = ["upcoming", "today", "history"] as const
+export type StoreDeliveryTab = (typeof STORE_DELIVERY_TABS)[number]
+
+export const storeDeliveriesQuerySchema = z.object({
+  tab: z.enum(STORE_DELIVERY_TABS).default("today"),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(5).max(50).default(10),
+})
+export type StoreDeliveriesQuery = z.infer<typeof storeDeliveriesQuerySchema>
+
+/** Where a delivery is on its way to being counted in. */
+export const DELIVERY_STAGES = ["PLANNED", "LOADED", "ON_THE_WAY", "ARRIVED", "DELIVERED", "RECEIVED"] as const
+export type DeliveryStage = (typeof DELIVERY_STAGES)[number]
+export const DELIVERY_STAGE_LABEL: Record<DeliveryStage, string> = {
+  PLANNED: "Planned",
+  LOADED: "Loaded",
+  ON_THE_WAY: "On the way",
+  ARRIVED: "Arrived",
+  DELIVERED: "Delivered",
+  RECEIVED: "Received",
+}
+
+export interface StoreDeliveryItem {
+  orderId: string
+  orderRef: string
+  status: string
+  stage: DeliveryStage | null
+  deliveryDate: string
+  temp: StoreTemp
+  units: number
+  items: number
+  vehicleId: string | null
+  driverName: string | null
+  plannedArrivalMin: number | null
+  etaMin: number | null
+  /** The driver has handed it over and the store has not counted it in yet. */
+  canReceive: boolean
+}
+
+/** The delivery the store is waiting for right now, with live position in the trip. */
+export interface StoreOnTheWay {
+  orderId: string
+  orderRef: string
+  stage: DeliveryStage
+  tripRef: string
+  vehicleId: string
+  vehicleLabel: string
+  driver: { name: string; phone: string | null } | null
+  plannedArrivalMin: number
+  etaMin: number
+  /** Minutes behind (positive) or ahead (negative) of plan. */
+  delayMin: number
+  windowOpenMin: number
+  windowCloseMin: number
+  /** Stops the vehicle still has to make before yours. */
+  stopsBefore: number
+  totalStops: number
+  /** True when the position comes from the driver app or the running clock, false for a plain schedule. */
+  live: boolean
+  units: number
+  items: number
+}
+
+export interface StoreDeliveriesResponse {
+  tab: StoreDeliveryTab
+  today: string
+  items: StoreDeliveryItem[]
+  total: number
+  page: number
+  pageSize: number
+  counts: Record<StoreDeliveryTab, number>
+  onTheWay: StoreOnTheWay | null
+}
+
+// ───────────────────────────── Receiving ─────────────────────────────
+
+export const LINE_CONDITIONS = ["GOOD", "DAMAGED", "EXPIRED", "WRONG_ITEM"] as const
+export type LineCondition = (typeof LINE_CONDITIONS)[number]
+export const LINE_CONDITION_LABEL: Record<LineCondition, string> = {
+  GOOD: "Good",
+  DAMAGED: "Damaged",
+  EXPIRED: "Expired",
+  WRONG_ITEM: "Wrong item",
+}
+
+/** What the driver says was handed over: the baseline the store counts against. */
+export interface StoreReceivingDetail {
+  orderId: string
+  orderRef: string
+  status: string
+  temp: StoreTemp
+  deliveredAt: string | null
+  recipientName: string | null
+  driverNotes: string | null
+  /** True once a receipt exists (the order is RECEIVED). */
+  received: boolean
+  /** True when the order is in a state the store can count in. */
+  canReceive: boolean
+  lines: { orderLineId: string; description: string; category: string; orderedQty: number; expectedQty: number; refusedQty: number; reason: string | null }[]
+}
+
+export const receiveDeliverySchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        orderLineId: z.string(),
+        receivedQty: z.number().int().min(0).max(100_000),
+        condition: z.enum(LINE_CONDITIONS).default("GOOD"),
+        notes: z.string().trim().max(200).optional(),
+      }),
+    )
+    .min(1),
+  notes: z.string().trim().max(500).optional(),
+})
+export type ReceiveDeliveryInput = z.infer<typeof receiveDeliverySchema>
+
+export interface StoreReceiptResult {
+  orderId: string
+  orderRef: string
+  receiptStatus: string
+  /** Issues raised automatically for lines that were short, damaged or wrong. */
+  issues: { id: string; ref: string; type: string }[]
+}
+
+// ───────────────────────────── Issues ─────────────────────────────
+
+export const STORE_ISSUE_TYPES = ["RECEIPT_MISSING", "RECEIPT_DAMAGED", "RECEIPT_WRONG_ITEMS", "OTHER"] as const
+export type StoreIssueType = (typeof STORE_ISSUE_TYPES)[number]
+
+export const reportStoreIssueSchema = z.object({
+  clientId: z.string().min(8).max(64).optional(),
+  type: z.enum(STORE_ISSUE_TYPES),
+  orderLineId: z.string().optional(),
+  quantity: z.number().int().positive().max(100_000).optional(),
+  description: z.string().trim().min(3).max(500),
+  photoId: z.string().min(8).optional(),
+})
+export type ReportStoreIssueInput = z.infer<typeof reportStoreIssueSchema>
+
+export interface StoreIssueRow {
+  id: string
+  ref: string
+  type: string
+  severity: string
+  status: string
+  description: string
+  quantity: number | null
+  createdAt: string
+  orderId: string | null
+  orderRef: string | null
+  resolution: string | null
+}
+
+export interface StoreIssueDetail extends StoreIssueRow {
+  stage: string
+  line: string | null
+  resolvedAt: string | null
+  resolvedBy: string | null
+  reportedBy: string
+  /** Id of the attached photo; the image itself is served at /api/media/<id>. */
+  photoId: string | null
+  timeline: { id: string; action: string; at: string; actor: string }[]
+}
+
+export interface StoreMediaSaved {
+  id: string
+  sizeBytes: number
+}

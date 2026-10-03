@@ -93,6 +93,7 @@ export const NAV: Record<Role, NavGroup[]> = {
           ],
         },
         { title: "Deliveries", href: "/store-manager/deliveries", icon: Truck },
+        { title: "Issues", href: "/store-manager/issues", icon: CircleAlert },
         { title: "Inventory", href: "/store-manager/inventory", icon: Package, soon: true },
       ],
     },

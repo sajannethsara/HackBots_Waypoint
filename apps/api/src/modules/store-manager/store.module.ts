@@ -3,12 +3,20 @@ import type { Prisma } from "@waypoint/db"
 import {
   cancelStoreOrderSchema,
   createStoreOrderSchema,
+  driverMediaSchema,
+  receiveDeliverySchema,
+  reportStoreIssueSchema,
+  storeDeliveriesQuerySchema,
   dateOnly,
   storeOrdersQuerySchema,
   updateStoreOrderSchema,
   toDateOnly,
   type CancelStoreOrderInput,
   type CreateStoreOrderInput,
+  type DriverMediaInput,
+  type ReceiveDeliveryInput,
+  type ReportStoreIssueInput,
+  type StoreDeliveriesQuery,
   type StoreCancelReason,
   type StoreDashboard,
   type StoreOrderDetail,
@@ -22,8 +30,12 @@ import {
 import { CurrentUser, Roles, type SessionUser } from "../../common/auth"
 import { PrismaService } from "../../common/prisma.service"
 import { ZodPipe } from "../../common/zod.pipe"
+import { IssuesModule } from "../issues/issues.module"
+import { LiveModule } from "../live/live.module"
+import { MediaModule } from "../media/media.module"
 import { PlanningModule } from "../planning/planning.module"
 import { StoreOrderingService } from "./store-ordering.service"
+import { StoreReceivingService } from "./store-receiving.service"
 
 const TAB_WHERE: Record<StoreOrderTab, Prisma.OrderWhereInput> = {
   orders: { status: { notIn: ["DRAFT", "CANCELLED"] } },
@@ -215,6 +227,7 @@ export class StoreController {
   constructor(
     private readonly store: StoreService,
     private readonly ordering: StoreOrderingService,
+    private readonly receiving: StoreReceivingService,
   ) {}
 
   @Get("dashboard")
@@ -225,6 +238,41 @@ export class StoreController {
   @Get("orders")
   orders(@CurrentUser() user: SessionUser, @Query(new ZodPipe(storeOrdersQuerySchema)) q: StoreOrdersQuery) {
     return this.store.orders(user, q)
+  }
+
+  @Get("deliveries")
+  deliveries(@CurrentUser() user: SessionUser, @Query(new ZodPipe(storeDeliveriesQuerySchema)) q: StoreDeliveriesQuery) {
+    return this.receiving.deliveries(user, q)
+  }
+
+  @Get("orders/:id/receiving")
+  receivingDetail(@CurrentUser() user: SessionUser, @Param("id") id: string) {
+    return this.receiving.receiving(user, id)
+  }
+
+  @Post("orders/:id/receipt")
+  receive(@CurrentUser() user: SessionUser, @Param("id") id: string, @Body(new ZodPipe(receiveDeliverySchema)) body: ReceiveDeliveryInput) {
+    return this.receiving.receive(user, id, body)
+  }
+
+  @Post("orders/:id/issues")
+  reportIssue(@CurrentUser() user: SessionUser, @Param("id") id: string, @Body(new ZodPipe(reportStoreIssueSchema)) body: ReportStoreIssueInput) {
+    return this.receiving.reportIssue(user, id, body)
+  }
+
+  @Post("media")
+  media(@CurrentUser() user: SessionUser, @Body(new ZodPipe(driverMediaSchema)) body: DriverMediaInput) {
+    return this.receiving.saveMedia(user, body)
+  }
+
+  @Get("issues")
+  issues(@CurrentUser() user: SessionUser, @Query("status") status?: string) {
+    return this.receiving.issueList(user, status)
+  }
+
+  @Get("issues/:id")
+  issue(@CurrentUser() user: SessionUser, @Param("id") id: string) {
+    return this.receiving.issue(user, id)
   }
 
   @Get("order-rules")
@@ -258,5 +306,5 @@ export class StoreController {
   }
 }
 
-@Module({ imports: [PlanningModule], controllers: [StoreController], providers: [StoreService, StoreOrderingService] })
+@Module({ imports: [PlanningModule, IssuesModule, LiveModule, MediaModule], controllers: [StoreController], providers: [StoreService, StoreOrderingService, StoreReceivingService] })
 export class StoreModule {}
