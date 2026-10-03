@@ -247,7 +247,7 @@ export class IssueActionsService {
       const managers = await tx.user.findMany({ where: { role: "STORE_MANAGER", outletId: order.outletId, isActive: true }, select: { id: true } })
       await tx.notification.createMany({
         data: [
-          ...managers.map((m) => ({ userId: m.id, type: "ORDER_DEFERRED", title: `${order.ref} moved to ${nextDay}`, body: explanation, link: `/store/orders/${order.id}` })),
+          ...managers.map((m) => ({ userId: m.id, type: "ORDER_DEFERRED", title: `${order.ref} moved to ${nextDay}`, body: explanation, link: `/store-manager/orders/${order.id}` })),
           ...(trip.driverId ? [{ userId: trip.driverId, type: "TRIP_UPDATED", title: `${order.ref} removed from ${trip.ref}`, body: `Skip ${order.outlet.name}: ${explanation}`, link: "/driver" }] : []),
         ],
       })
@@ -280,7 +280,7 @@ export class IssueActionsService {
       const full = await tx.order.findUniqueOrThrow({ where: { id: order.id }, select: { outletId: true } })
       const managers = await tx.user.findMany({ where: { role: "STORE_MANAGER", outletId: full.outletId, isActive: true }, select: { id: true } })
       await tx.notification.createMany({
-        data: managers.map((m) => ({ userId: m.id, type: "ORDER_UPDATED", title: `${order.ref} will arrive ${q} short`, body: note?.trim() || `${q} × ${line.description} will not be delivered. You will be credited.`, link: `/store/orders/${order.id}` })),
+        data: managers.map((m) => ({ userId: m.id, type: "ORDER_UPDATED", title: `${order.ref} will arrive ${q} short`, body: note?.trim() || `${q} × ${line.description} will not be delivered. You will be credited.`, link: `/store-manager/orders/${order.id}` })),
       })
       await tx.auditLog.create({ data: { actorId: user.sub, action: "ORDER_SHORT_SHIPPED", entityType: "Order", entityId: order.id, after: { line: line.description, removed: q, issue: issue.ref } } })
     })

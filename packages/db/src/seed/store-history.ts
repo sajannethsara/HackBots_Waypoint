@@ -31,7 +31,7 @@ export async function seedStoreHistory(db: PrismaClient) {
       const ref = `H-${r.delivery_id.replace(/^ORD/, "")}`
       const cancelled = i === 3
       const confirmedById = managers.get(outletId)!
-      await db.order.create({
+      const created = await db.order.create({
         data: {
           ref,
           outletId,
@@ -51,7 +51,13 @@ export async function seedStoreHistory(db: PrismaClient) {
             ? {}
             : { receipt: { create: { status: "CONFIRMED", confirmedById, confirmedAt: new Date(`${r.dispatch_date}T11:00:00+05:30`) } } }),
         },
+        select: { receipt: { select: { id: true } }, lines: { select: { id: true, quantity: true } } },
       })
+      // Past deliveries arrived complete and in good condition.
+      if (created.receipt)
+        await db.receiptLine.createMany({
+          data: created.lines.map((l) => ({ receiptId: created.receipt!.id, orderLineId: l.id, expectedQty: l.quantity, receivedQty: l.quantity })),
+        })
       count++
     }
   }

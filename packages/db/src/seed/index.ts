@@ -11,6 +11,7 @@ import { DEMO_DATE, seedDemoDay } from "./demo-day"
 import { seedDemand } from "./demand"
 import { seedIssues, seedSystemUser } from "./issues"
 import { seedStoreHistory } from "./store-history"
+import { seedProducts } from "./products"
 import { seedReference } from "./reference"
 import { DEMO_ACCOUNTS, DEMO_PASSWORD, seedUsers } from "./users"
 
@@ -19,8 +20,8 @@ const db = new PrismaClient()
 async function wipe() {
   // Children before parents.
   const tables = [
-    "Message", "Conversation", "AuditLog", "Notification", "Receipt", "IssueChatMessage", "IssueChatMember", "IssueChat", "Issue", "DeliveryLine", "ProofOfDelivery", "MediaAsset",
-    "DriverLocation", "DeliveryEvent", "Stop", "FuelLedgerEntry", "Trip", "PlanDecision", "Plan", "OrderLine", "Order",
+    "Message", "Conversation", "AuditLog", "Notification", "ReceiptLine", "Receipt", "IssueChatMessage", "IssueChatMember", "IssueChat", "Issue", "DeliveryLine", "ProofOfDelivery", "MediaAsset",
+    "DriverLocation", "DeliveryEvent", "Stop", "FuelLedgerEntry", "Trip", "PlanDecision", "Plan", "OrderLine", "Order", "Product",
     "DemandForecast", "DemandWeekly", "User", "RoadCondition", "TrafficSpeed", "CalendarDay",
     "ServiceAllowance", "Vehicle", "Outlet", "District", "Depot", "AppSetting",
   ]
@@ -47,6 +48,7 @@ async function main() {
   console.log("✓ users")
   const day = await seedDemoDay(db)
   console.log(`✓ demo day ${DEMO_DATE}: ${day.peliyagoda} Peliyagoda + ${day.kandy} Kandy orders`)
+  console.log(`✓ ${await seedProducts(db)} catalog products`)
   console.log(`✓ ${await seedStoreHistory(db)} past and draft orders for the store app`)
   console.log(`✓ ${await seedIssues(db)} open/recent field issues`)
   const demand = await seedDemand(db, DEMO_DATE)

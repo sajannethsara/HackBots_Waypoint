@@ -78,30 +78,30 @@ export const NAV: Record<Role, NavGroup[]> = {
   STORE_MANAGER: [
     {
       label: "Overview",
-      items: [{ title: "Dashboard", href: "/store", icon: LayoutDashboard }],
+      items: [{ title: "Dashboard", href: "/store-manager", icon: LayoutDashboard }],
     },
     {
       label: "Ordering",
       items: [
         {
           title: "Orders",
-          href: "/store/orders",
+          href: "/store-manager/orders",
           icon: ClipboardList,
           children: [
-            { title: "My Orders", href: "/store/orders" },
-            { title: "Create Order", href: "/store/orders/new" },
+            { title: "My Orders", href: "/store-manager/orders" },
+            { title: "Create Order", href: "/store-manager/orders/new" },
           ],
         },
-        { title: "Deliveries", href: "/store/deliveries", icon: Truck },
-        { title: "Inventory", href: "/store/inventory", icon: Package, soon: true },
+        { title: "Deliveries", href: "/store-manager/deliveries", icon: Truck },
+        { title: "Inventory", href: "/store-manager/inventory", icon: Package, soon: true },
       ],
     },
     {
       label: "Outlet",
       items: [
-        { title: "Outlet Profile", href: "/store/profile", icon: Building2 },
-        { title: "Settings", href: "/store/settings", icon: Settings },
-        { title: "Inbox", href: "/store/inbox", icon: MessagesSquare, badgeKey: "inbox" },
+        { title: "Outlet Profile", href: "/store-manager/profile", icon: Building2 },
+        { title: "Settings", href: "/store-manager/settings", icon: Settings },
+        { title: "Inbox", href: "/store-manager/inbox", icon: MessagesSquare, badgeKey: "inbox" },
       ],
     },
   ],
@@ -111,5 +111,5 @@ export const HOME: Record<Role, string> = {
   DISPATCHER: "/dispatcher",
   LOADER: "/loader",
   DRIVER: "/driver",
-  STORE_MANAGER: "/store",
+  STORE_MANAGER: "/store-manager",
 }

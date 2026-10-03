@@ -16,7 +16,7 @@ import { TripsModule } from "./modules/trips/trips.module"
 import { OutletsModule } from "./modules/outlets/outlets.module"
 import { VehiclesModule } from "./modules/vehicles/vehicles.module"
 import { OrdersModule } from "./modules/orders/orders.module"
-import { StoreModule } from "./modules/store/store.module"
+import { StoreModule } from "./modules/store-manager/store.module"
 import { PlanningModule } from "./modules/planning/planning.module"
 import { ReferenceModule } from "./modules/reference/reference.module"
 
