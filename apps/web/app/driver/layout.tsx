@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   applicationName: "Waypoint Driver",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "Waypoint", statusBarStyle: "default" },
-  icons: { icon: "/logo-icon.png", apple: "/logo-icon.png" },
+  icons: { icon: "/app-icon.png", apple: "/app-icon.png" },
   formatDetection: { telephone: false },
 }
 

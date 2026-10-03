@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState } from "react"
+import { createContext, useContext, useState, useSyncExternalStore } from "react"
 import { useAppContext } from "./use-session"
 
 /**
@@ -17,19 +17,34 @@ interface Workspace {
 
 const Ctx = createContext<Workspace | null>(null)
 
+const DEPOT_KEY = "wp.depot"
+// Kept in memory too, so the switcher still works when storage is blocked (private windows).
+let memoryDepot: string | null = null
+const listeners = new Set<() => void>()
+function subscribeDepot(cb: () => void) {
+  listeners.add(cb)
+  window.addEventListener("storage", cb)
+  return () => {
+    listeners.delete(cb)
+    window.removeEventListener("storage", cb)
+  }
+}
+
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const { data } = useAppContext()
-  // Explicit choices override the server defaults; nothing is copied into state.
-  const [depotChoice, setDepotChoice] = useState<string | null>(() => readStored("wp.depot"))
+  // The remembered depot lives in localStorage, which the server cannot see: read it as an external
+  // store so the first client render matches the server HTML and the choice applies right after hydration.
+  const storedDepot = useSyncExternalStore(subscribeDepot, () => readStored(DEPOT_KEY), () => null)
   const [dateChoice, setDate] = useState<string | null>(null)
-  const depotId = depotChoice ?? data?.defaultDepotId ?? ""
+  const depotId = storedDepot ?? data?.defaultDepotId ?? ""
   const date = dateChoice ?? data?.operatingDate ?? ""
 
   const set = (id: string) => {
-    setDepotChoice(id)
+    memoryDepot = id
     try {
-      localStorage.setItem("wp.depot", id)
+      localStorage.setItem(DEPOT_KEY, id)
     } catch {}
+    listeners.forEach((l) => l())
   }
 
   return (
@@ -47,8 +62,8 @@ export function useWorkspace() {
 
 function readStored(key: string) {
   try {
-    return localStorage.getItem(key)
+    return localStorage.getItem(key) ?? memoryDepot
   } catch {
-    return null
+    return memoryDepot
   }
 }

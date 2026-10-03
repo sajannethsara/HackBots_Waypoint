@@ -5,6 +5,7 @@ import { SESSION_COOKIE, type SessionUser } from "../../common/auth"
 
 export const deskRoom = (depotId: string) => `desk:${depotId}`
 export const userRoom = (userId: string) => `user:${userId}`
+export const DISPATCHERS_ROOM = "dispatchers"
 
 /**
  * Realtime delivery for messages. Authorised by the same session cookie as the REST API.
@@ -30,16 +31,19 @@ export class ChatGateway implements OnGatewayConnection {
       const user = await this.jwt.verifyAsync<SessionUser>(token ?? "")
       client.data.user = user
       await client.join(userRoom(user.sub))
-      if (user.role === "DISPATCHER" && user.depotId) await client.join(deskRoom(user.depotId))
+      if (user.role === "DISPATCHER") {
+        if (user.depotId) await client.join(deskRoom(user.depotId))
+        await client.join(DISPATCHERS_ROOM) // issue chats of every depot (a dispatcher can switch depots)
+      }
     } catch {
       client.emit("chat:error", { message: "Not signed in" })
       client.disconnect(true)
     }
   }
 
-  /** Deliver to the depot's dispatch desk and to each listed user (issue group chats). */
-  publishTo(depotId: string, userIds: string[], event: string, payload: unknown) {
-    this.server?.to([deskRoom(depotId), ...userIds.map(userRoom)]).emit(event, payload)
+  /** Deliver to every dispatcher and to each listed user (issue group chats). */
+  publishTo(_depotId: string, userIds: string[], event: string, payload: unknown) {
+    this.server?.to([DISPATCHERS_ROOM, ...userIds.map(userRoom)]).emit(event, payload)
   }
 
   /** Deliver to the depot's dispatch desk and to the member on the other side. */

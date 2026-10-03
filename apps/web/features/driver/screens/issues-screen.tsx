@@ -1,8 +1,10 @@
 "use client"
 
-import { ChevronRight, MessagesSquare, PackageX } from "lucide-react"
+import { ChevronRight, Headset, MessagesSquare, PackageX } from "lucide-react"
 import { ISSUE_TYPE_META, ROLE_LABEL, type DriverIssue } from "@waypoint/shared"
 import { IssueStatusBadge, SeverityBadge } from "@/features/dispatcher/issues/issue-badges"
+import { UnreadDot } from "@/features/chat/chat-parts"
+import { useUnread } from "@/features/chat/use-chat"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { timeAgo } from "@/lib/format"
@@ -14,7 +16,8 @@ import { SectionTitle } from "../ui"
 /** Issues on the driver's trips, whoever raised them (dispatch, loader, store, the driver, live monitoring). */
 export function IssuesScreen() {
   const { bundle, outbox } = useDriver()
-  const { openChat, openIssue } = useNav()
+  const { openChat, openIssue, openDispatch } = useNav()
+  const { data: desk } = useUnread()
   const open = bundle.issues.filter((i) => i.status !== "RESOLVED")
   const resolved = bundle.issues.filter((i) => i.status === "RESOLVED")
   // Reports made on this phone that have not reached dispatch yet.
@@ -22,12 +25,18 @@ export function IssuesScreen() {
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3 p-4">
-      <Button variant="outline" className="h-11" onClick={() => openIssue()}>
-        <PackageX data-icon="inline-start" /> Report a problem
-      </Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="outline" className="h-11" onClick={() => openIssue()}>
+          <PackageX data-icon="inline-start" /> Report a problem
+        </Button>
+        <Button variant="outline" className="h-11" onClick={openDispatch}>
+          <Headset data-icon="inline-start" /> Message dispatch
+          <UnreadDot count={desk?.unread ?? 0} />
+        </Button>
+      </div>
 
       {queued.length > 0 && (
-        <div className="grid min-w-0 gap-2">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
           <SectionTitle>Waiting to send · {queued.length}</SectionTitle>
           {queued.map((q) => {
             const p = q.payload as { type: keyof typeof ISSUE_TYPE_META; description: string }
@@ -55,13 +64,13 @@ export function IssuesScreen() {
       ) : (
         <>
           {open.length > 0 && <SectionTitle>Open · {open.length}</SectionTitle>}
-          <div className="grid gap-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
             {open.map((i) => (
               <IssueRow key={i.id} issue={i} onClick={() => openChat(i.id)} />
             ))}
           </div>
           {resolved.length > 0 && <SectionTitle>Resolved · {resolved.length}</SectionTitle>}
-          <div className="grid gap-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
             {resolved.map((i) => (
               <IssueRow key={i.id} issue={i} onClick={() => openChat(i.id)} />
             ))}
@@ -75,7 +84,7 @@ export function IssuesScreen() {
 function IssueRow({ issue: i, onClick }: { issue: DriverIssue; onClick: () => void }) {
   const unread = i.chat?.unread ?? 0
   return (
-    <button type="button" onClick={onClick} className={cn("grid min-w-0 gap-1.5 rounded-xl border bg-card px-3 py-3 text-left transition-colors active:bg-muted", i.status === "RESOLVED" && "opacity-75")}>
+    <button type="button" onClick={onClick} className={cn("grid w-full min-w-0 grid-cols-[minmax(0,1fr)] gap-1.5 rounded-xl border bg-card px-3 py-3 text-left transition-colors active:bg-muted", i.status === "RESOLVED" && "opacity-75")}>
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-sm font-semibold">{ISSUE_TYPE_META[i.type].label}</span>
         <span className="text-xs text-muted-foreground">{i.ref}</span>

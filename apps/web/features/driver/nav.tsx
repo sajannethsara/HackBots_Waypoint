@@ -4,8 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-export type Tab = "trip" | "map" | "issues" | "inbox" | "me"
-export type Overlay = { kind: "stop"; stopId: string } | { kind: "issue"; stopId?: string } | { kind: "chat"; issueId: string } | null
+export type Tab = "trip" | "map" | "issues" | "alerts" | "me"
+export type Overlay = { kind: "stop"; stopId: string } | { kind: "issue"; stopId?: string } | { kind: "chat"; issueId: string } | { kind: "dispatch" } | null
 
 interface Nav {
   tab: Tab
@@ -17,6 +17,8 @@ interface Nav {
   openIssue: (stopId?: string) => void
   /** An issue's group chat. */
   openChat: (issueId: string) => void
+  /** The direct line to the dispatch desk. */
+  openDispatch: () => void
   close: () => void
 }
 
@@ -68,6 +70,7 @@ export function NavProvider({ children }: { children: React.ReactNode }) {
     openStop: (stopId) => show({ kind: "stop", stopId }),
     openIssue: (stopId) => show({ kind: "issue", stopId }),
     openChat: (issueId) => show({ kind: "chat", issueId }),
+    openDispatch: () => show({ kind: "dispatch" }),
     close,
   }
   return <NavCtx.Provider value={value}>{children}</NavCtx.Provider>

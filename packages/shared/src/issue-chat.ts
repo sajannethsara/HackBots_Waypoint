@@ -5,10 +5,12 @@ import type { IssueSeverity, IssueStatus, IssueType } from "./issues"
 
 /**
  * Issue group chat. Everyone an issue affects (driver, loader, store manager) talks in one room.
- * The dispatcher watches, changes the issue's status and closes the chat; they do not post.
+ * The dispatcher is in the room too: they can talk to everyone, invite more people, change the issue's
+ * status and close the chat.
  */
 
-export const canPostIssueChat = (role: Role) => role !== "DISPATCHER"
+/** Everyone in the room may write while it is open (the dispatcher included). */
+export const canPostIssueChat = (_role: Role) => true
 
 export const issueChatMessageSchema = z.object({
   body: z.string().trim().min(1, "Write a message").max(MESSAGE_MAX),

@@ -7,7 +7,7 @@
 export const loadMapScreen = () => import("../screens/map-screen")
 export const loadStopFlow = () => import("../flow/stop-flow")
 export const loadReportIssue = () => import("../flow/report-issue")
-export const loadInbox = () => import("../screens/inbox-screen")
+export const loadDispatchChat = () => import("../flow/dispatch-chat-screen")
 export const loadIssueChat = () => import("../flow/issue-chat-screen")
 
-export const preloadAll = () => Promise.all([loadMapScreen(), loadStopFlow(), loadReportIssue(), loadInbox(), loadIssueChat()])
+export const preloadAll = () => Promise.all([loadMapScreen(), loadStopFlow(), loadReportIssue(), loadDispatchChat(), loadIssueChat()])

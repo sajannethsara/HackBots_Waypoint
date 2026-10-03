@@ -354,10 +354,10 @@ export class IssueActionsService {
   }
 
   private async load(user: SessionUser, issueId: string): Promise<IssueRow> {
-    if (user.role !== "DISPATCHER" || !user.depotId) throw new ForbiddenException("Only a dispatcher can do this")
+    // Dispatchers work across depots (the depot switcher), like the rest of the issues API.
+    if (user.role !== "DISPATCHER") throw new ForbiddenException("Only a dispatcher can do this")
     const issue = await this.db.issue.findUnique({ where: { id: issueId }, select: issueSelect })
-    const depot = issue && (issue.trip?.plan.depotId ?? issue.outlet?.depotId ?? issue.order?.depotId ?? issue.vehicle?.depotId)
-    if (!issue || depot !== user.depotId) throw new NotFoundException("Issue not found")
+    if (!issue) throw new NotFoundException("Issue not found")
     return issue
   }
 }

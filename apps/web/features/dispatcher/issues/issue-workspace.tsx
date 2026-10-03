@@ -73,17 +73,17 @@ function StatusSteps({ issue }: { issue: IssueDetail }) {
   ]
   return (
     <div className="grid gap-2.5 border-b p-3">
-      <ol className="flex items-start">
+      <ol className="flex items-center gap-2">
         {steps.map((s, i) => (
-          <li key={s.label} className="flex flex-1 items-start last:flex-none">
-            <div className="grid justify-items-start gap-0.5">
-              <span className={cn("flex size-5 items-center justify-center rounded-full border text-[10px]", i <= idx ? "border-primary bg-primary text-primary-foreground" : "bg-background text-muted-foreground")}>
-                {i <= idx ? <Check className="size-3" /> : i + 1}
-              </span>
-              <span className={cn("text-[11px] leading-tight font-medium", i > idx && "text-muted-foreground")}>{s.label}</span>
-              <span className="text-[10px] text-muted-foreground">{i <= idx && s.at ? timeAgo(s.at) : "—"}</span>
-            </div>
-            {i < steps.length - 1 && <span className={cn("mx-2 mt-2.5 h-px flex-1", i < idx ? "bg-primary" : "bg-border")} />}
+          <li key={s.label} className="flex flex-1 items-center gap-2 last:flex-none">
+            <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-medium", i <= idx ? "border-primary bg-primary text-primary-foreground" : "bg-background text-muted-foreground")}>
+              {i <= idx ? <Check className="size-3.5" /> : i + 1}
+            </span>
+            <span className="grid leading-tight">
+              <span className={cn("text-xs font-medium", i > idx && "text-muted-foreground")}>{s.label}</span>
+              <span className="text-[10px] text-muted-foreground">{i <= idx && s.at ? timeAgo(s.at) : "Pending"}</span>
+            </span>
+            {i < steps.length - 1 && <span className={cn("h-px min-w-3 flex-1", i < idx ? "bg-primary" : "bg-border")} />}
           </li>
         ))}
       </ol>
@@ -104,16 +104,25 @@ function StatusSteps({ issue }: { issue: IssueDetail }) {
 const ACTION_ICON = { "defer-order": CalendarClock, "vehicle-out-of-service": Wrench, "vehicle-return": Truck, "short-ship": PackageMinus } as const
 
 function Decisions({ issue }: { issue: IssueDetail }) {
-  const { data, isLoading } = useIssueActions(issue.id)
+  const { data, isLoading, isError, refetch } = useIssueActions(issue.id)
   const [selected, setSelected] = useState<IssueActionOption | null>(null)
 
+  if (isError)
+    return (
+      <div className="grid gap-2 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+        <p>Decisions could not be loaded.</p>
+        <Button size="xs" variant="outline" className="mx-auto" onClick={() => refetch()}>
+          Try again
+        </Button>
+      </div>
+    )
   if (isLoading || !data) return <Skeleton className="h-40" />
   return (
     <div className="grid gap-4">
       <p className="text-xs text-muted-foreground">Decisions change trips, orders and vehicles for real. Everyone in the chat is told what you decided.</p>
 
       {!data.actions.length ? (
-        <p className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">Nothing in the system depends on this issue. Talk it through in the chat, then resolve it with a note.</p>
+        <p className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">This issue is not linked to an order, trip or vehicle, so there is nothing to change in the system. Talk it through in the chat, then resolve it with a note.</p>
       ) : (
         <ul className="grid gap-2">
           {data.actions.map((a) => {

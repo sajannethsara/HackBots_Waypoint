@@ -1,6 +1,6 @@
 "use client"
 
-import { CircleCheck, CircleX, Clock, MapPin, Navigation, Snowflake, TriangleAlert, WifiOff } from "lucide-react"
+import { CircleCheck, CircleX, Clock, CloudCheck, CloudUpload, MapPin, Navigation, RefreshCw, Snowflake, TriangleAlert, WifiOff } from "lucide-react"
 import { minToHHMM, type DriverStop, type DriverStopStatus, type LatLng } from "@waypoint/shared"
 import { TagBadge, type Tone } from "@/components/shared/badges"
 import { Spinner } from "@/components/ui/spinner"
@@ -142,6 +142,24 @@ export function linkState(o: { online: boolean; syncing: boolean; pending: numbe
   if (o.syncing) return { kind: "syncing", label: "Syncing…" }
   if (o.pending) return { kind: "waiting", label: `${o.pending} waiting` }
   return { kind: "online", label: "All synced" }
+}
+
+/** Sync state as a single icon (header). `SyncChip` below adds the words. */
+export function SyncIcon({ state, onClick }: { state: LinkState; onClick?: () => void }) {
+  const color: Record<LinkState["kind"], string> = {
+    online: "text-emerald-600 dark:text-emerald-400",
+    syncing: "text-sky-600 dark:text-sky-400",
+    waiting: "text-amber-600 dark:text-amber-400",
+    offline: "text-amber-600 dark:text-amber-400",
+    attention: "text-red-600 dark:text-red-400",
+    expired: "text-red-600 dark:text-red-400",
+  }
+  const Icon = { online: CloudCheck, syncing: RefreshCw, waiting: CloudUpload, offline: WifiOff, attention: TriangleAlert, expired: TriangleAlert }[state.kind]
+  return (
+    <button type="button" onClick={onClick} title={state.label} aria-label={state.label} className={cn("grid size-9 place-items-center rounded-full active:bg-muted", color[state.kind])}>
+      <Icon className={cn("size-5", state.kind === "syncing" && "animate-spin")} />
+    </button>
+  )
 }
 
 export function SyncChip({ state, onClick }: { state: LinkState; onClick?: () => void }) {

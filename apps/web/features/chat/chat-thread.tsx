@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { ArrowLeft, ExternalLink, MessageSquareText, Phone, RotateCcw, Trash2 } from "lucide-react"
+import { ArrowLeft, ExternalLink, Headset, MessageSquareText, Phone, RotateCcw, Trash2 } from "lucide-react"
 import { ISSUE_TYPE_META, type ChatMessage, type IssueSeverity, type IssueStatus, type IssueType, type Role } from "@waypoint/shared"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
@@ -113,13 +113,20 @@ export function ChatThread({
         )}
         {other ? (
           <>
-            <PersonAvatar name={other.name} role={other.role} />
+            {me?.role !== "DISPATCHER" ? (
+              // The other side is the dispatch desk: a team, not a person, so no initials.
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
+                <Headset className="size-4" />
+              </span>
+            ) : (
+              <PersonAvatar name={other.name} role={other.role} />
+            )}
             <div className="min-w-0 flex-1 leading-tight">
               <div className="flex items-center gap-2">
                 <p className="truncate text-sm font-semibold">{other.name}</p>
-                <RoleTag role={other.role} />
+                {me?.role === "DISPATCHER" && <RoleTag role={other.role} />}
               </div>
-              <p className="truncate text-xs text-muted-foreground">{other.detail ?? "Dispatch · this depot"}</p>
+              <p className="truncate text-xs text-muted-foreground">{me?.role === "DISPATCHER" ? (other.detail ?? "") : "Replies come from whoever is on shift"}</p>
             </div>
             {other.phone && (
               <Button variant="outline" size="icon-sm" nativeButton={false} render={<a href={`tel:${other.phone}`} />} aria-label={`Call ${other.name}`} title={`Call ${other.phone}`}>
@@ -296,7 +303,7 @@ function Bubble({
 }) {
   return (
     <div className={cn("flex items-end gap-2", mine && "flex-row-reverse", first && "mt-2")}>
-      <div className="w-8 shrink-0">{last && m.sender && !mine && <PersonAvatar name={m.sender.name} role={m.sender.role} size="sm" />}</div>
+      {!mine && <div className="w-8 shrink-0">{last && m.sender && <PersonAvatar name={m.sender.name} role={m.sender.role} size="sm" />}</div>}
       <div className={cn("flex min-w-0 max-w-[82%] flex-col", mine ? "items-end" : "items-start")}>
         {first && m.sender && (!mine || !byMe) && (
           <span className="mb-0.5 flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">

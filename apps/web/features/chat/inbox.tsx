@@ -1,9 +1,13 @@
 "use client"
 
+import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useDeferredValue, useState } from "react"
-import { Headset, MessageSquarePlus, MessagesSquare, Search } from "lucide-react"
-import { ROLE_LABEL, type ConversationSummary, type Role } from "@waypoint/shared"
+import { useDeferredValue, useMemo, useState, useSyncExternalStore } from "react"
+import { ArrowLeft, ExternalLink, Headset, MessageSquarePlus, MessagesSquare, Search, Users } from "lucide-react"
+import { ISSUE_TYPE_META, ROLE_LABEL, type ConversationSummary, type IssueChatSummary, type Role } from "@waypoint/shared"
+import { IssueStatusBadge, SeverityBadge } from "@/features/dispatcher/issues/issue-badges"
+import { IssueChatPanel } from "@/features/issue-chat/issue-chat-card"
+import { useIssueChats, useIssueChatThread } from "@/features/issue-chat/use-issue-chat"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -24,27 +28,55 @@ type Scope = "all" | "unread" | "issues"
  * depot's desk and can start one with anyone; everyone else sees their own threads with the desk.
  * The open conversation lives in the URL (?c=) so it survives refresh and can be linked to.
  */
-export function Inbox() {
+export function Inbox({ issueChatsDepotId }: { /** Dispatcher: which depot's issue chats to list (the workspace depot). */ issueChatsDepotId?: string } = {}) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
   const selected = params.get("c")
+  const group = params.get("g") // an issue group chat (?g=<issue chat id>), dispatcher only
   const { data: me } = useMe()
   const link = useChatLink()
   const [scope, setScope] = useState<Scope>("all")
   const [search, setSearch] = useState("")
   const q = useDeferredValue(search.trim())
   const [picking, setPicking] = useState(false)
-  const list = useConversations(scope, q)
   const open = useOpenConversation()
-  const role = me?.role
+  // This sits in a Suspense boundary and hydrates after the sidebar has fetched the user, so the first
+  // client render must not depend on it or it would not match the server HTML.
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  )
+  const role = mounted ? me?.role : undefined
+  const isDispatcher = role === "DISPATCHER"
+  const direct = useConversations(scope, q)
+  // Group chats of the issues at this depot join the same list; "Unread" stays about direct messages.
+  const groupsQuery = useIssueChats("all", isDispatcher, issueChatsDepotId)
+  const groups = useMemo(() => {
+    if (!isDispatcher || scope === "unread") return []
+    const term = q.toLowerCase()
+    return (groupsQuery.data ?? []).filter(
+      (g) => !term || [g.issue.ref, ISSUE_TYPE_META[g.issue.type].label, g.issue.description, g.issue.tripRef, g.issue.outletName].some((s) => s?.toLowerCase().includes(term)),
+    )
+  }, [groupsQuery.data, isDispatcher, scope, q])
+  const items = useMemo(
+    () =>
+      [...(direct.data ?? []).map((c) => ({ type: "direct" as const, id: c.id, at: c.updatedAt, c })), ...groups.map((g) => ({ type: "group" as const, id: g.id, at: g.updatedAt, g }))].sort(
+        (a, b) => +new Date(b.at) - +new Date(a.at),
+      ),
+    [direct.data, groups],
+  )
+  const loading = direct.isLoading || (isDispatcher && groupsQuery.isLoading)
+  const anySelected = !!(selected || group)
 
   const select = (id: string | null) => router.replace(id ? `${pathname}?c=${id}` : pathname, { scroll: false })
+  const selectGroup = (id: string | null) => router.replace(id ? `${pathname}?g=${id}` : pathname, { scroll: false })
   const startWithDesk = () => open.mutate({}, { onSuccess: (c) => select(c.id) })
 
   return (
     <div className="grid h-full min-h-0 overflow-hidden rounded-xl border bg-card md:grid-cols-[340px_minmax(0,1fr)]">
-      <aside className={cn("flex min-h-0 min-w-0 flex-col overflow-hidden border-r", selected && "hidden md:flex")}>
+      <aside className={cn("flex min-h-0 min-w-0 flex-col overflow-hidden border-r", anySelected && "hidden md:flex")}>
         <div className="grid gap-2.5 border-b p-3">
           <div className="flex items-center gap-2">
             <h1 className="flex-1 text-base font-semibold tracking-tight">Inbox</h1>
@@ -76,13 +108,13 @@ export function Inbox() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-          {list.isLoading || !role ? (
+          {loading || !role ? (
             <div className="grid gap-2 p-3">
               {[0, 1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-14" />
               ))}
             </div>
-          ) : !list.data?.length ? (
+          ) : !items.length ? (
             <Empty className="m-3 border">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -96,9 +128,13 @@ export function Inbox() {
             </Empty>
           ) : (
             <ul className="divide-y">
-              {list.data.map((c) => (
-                <li key={c.id}>
-                  <Row c={c} role={role} active={c.id === selected} onClick={() => select(c.id)} />
+              {items.map((it) => (
+                <li key={`${it.type}:${it.id}`}>
+                  {it.type === "direct" ? (
+                    <Row c={it.c} role={role} active={it.id === selected} onClick={() => select(it.id)} />
+                  ) : (
+                    <GroupRow g={it.g} active={it.id === group} onClick={() => selectGroup(it.id)} />
+                  )}
                 </li>
               ))}
             </ul>
@@ -106,8 +142,10 @@ export function Inbox() {
         </div>
       </aside>
 
-      <section className={cn("flex min-h-0 min-w-0 flex-col", !selected && "hidden md:flex")}>
-        {selected ? (
+      <section className={cn("flex min-h-0 min-w-0 flex-col", !anySelected && "hidden md:flex")}>
+        {isDispatcher && group ? (
+          <GroupPane key={group} chatId={group} onBack={() => selectGroup(null)} />
+        ) : selected ? (
           <ChatThread key={selected} conversationId={selected} onBack={() => select(null)} />
         ) : (
           <Empty className="m-auto border-0">
@@ -165,6 +203,72 @@ function Row({ c, role, active, onClick }: { c: ConversationSummary; role: Role;
         </span>
       </span>
     </button>
+  )
+}
+
+/** An issue's group chat in the list: the people involved talk, dispatch watches. */
+function GroupRow({ g, active, onClick }: { g: IssueChatSummary; active: boolean; onClick: () => void }) {
+  const last = g.lastMessage
+  return (
+    <button type="button" onClick={onClick} className={cn("flex w-full min-w-0 items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", active && "bg-muted")}>
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <Users className="size-4" />
+      </span>
+      <span className="grid min-w-0 flex-1 grid-cols-1 gap-0.5">
+        <span className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">
+            {ISSUE_TYPE_META[g.issue.type].label} <span className="font-normal text-muted-foreground">· {g.issue.ref}</span>
+          </span>
+          <span className="shrink-0 text-[11px] text-muted-foreground">{shortAgo(g.updatedAt)}</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <SeverityBadge severity={g.issue.severity} />
+          <IssueStatusBadge status={g.issue.status} />
+          <span className="text-[11px] text-muted-foreground">
+            {g.closed ? "Closed · " : ""}
+            {g.memberCount} {g.memberCount === 1 ? "person" : "people"}
+          </span>
+        </span>
+        <span className="truncate text-xs text-muted-foreground">
+          {last ? (last.kind === "SYSTEM" || !last.senderName ? last.body : `${last.senderName}: ${last.body}`) : g.issue.description}
+        </span>
+      </span>
+    </button>
+  )
+}
+
+/** The open group chat: what the issue is, who is in it, and the controls to invite or close. */
+function GroupPane({ chatId, onBack }: { chatId: string; onBack: () => void }) {
+  const { data } = useIssueChatThread(chatId)
+  const issue = data?.chat.issue
+  return (
+    <>
+      <header className="flex items-center gap-2.5 border-b px-3 py-2.5">
+        <Button variant="ghost" size="icon-sm" onClick={onBack} aria-label="Back to conversations" className="md:hidden">
+          <ArrowLeft />
+        </Button>
+        {issue ? (
+          <>
+            <div className="min-w-0 flex-1 leading-tight">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold">
+                  {ISSUE_TYPE_META[issue.type].label} · {issue.ref}
+                </p>
+                <SeverityBadge severity={issue.severity} />
+                <IssueStatusBadge status={issue.status} />
+              </div>
+              <p className="truncate text-xs text-muted-foreground">{[issue.tripRef, issue.outletName].filter(Boolean).join(" · ") || issue.description}</p>
+            </div>
+            <Button size="xs" variant="outline" nativeButton={false} render={<Link href={`/dispatcher/issues/${issue.id}`} />}>
+              <ExternalLink data-icon="inline-start" /> Open issue
+            </Button>
+          </>
+        ) : (
+          <Skeleton className="h-9 w-56" />
+        )}
+      </header>
+      <IssueChatPanel chatId={chatId} fill />
+    </>
   )
 }
 

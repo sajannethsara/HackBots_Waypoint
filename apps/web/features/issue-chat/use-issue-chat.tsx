@@ -5,20 +5,21 @@ import { useCallback, useState } from "react"
 import { toast } from "sonner"
 import type { IssueChatDetail, IssueChatMessageDto, IssueChatSummary } from "@waypoint/shared"
 import { useMe } from "@/hooks/use-session"
-import { api, ApiError } from "@/lib/api"
+import { api, ApiError, qs } from "@/lib/api"
 import { IssueChatView, type PendingIssueMessage } from "./issue-chat-view"
 
 /** Issue group chat for the web roles (dispatcher, store manager, loader). The driver app has its own offline-aware wiring. */
 
 export const issueChatKeys = {
   all: ["issue-chat"] as const,
-  list: (status: string) => ["issue-chat", "list", status] as const,
+  list: (status: string, depotId = "") => ["issue-chat", "list", status, depotId] as const,
   thread: (id: string) => ["issue-chat", "thread", id] as const,
   byIssue: (issueId: string) => ["issue-chat", "by-issue", issueId] as const,
 }
 
-export const useIssueChats = (status: "open" | "closed" | "all" = "open") =>
-  useQuery({ queryKey: issueChatKeys.list(status), queryFn: () => api<IssueChatSummary[]>(`/issue-chats?status=${status}`), staleTime: 5_000 })
+/** `depotId` is for dispatchers, who can look at another depot's issue chats; members always see their own. */
+export const useIssueChats = (status: "open" | "closed" | "all" = "open", enabled = true, depotId?: string) =>
+  useQuery({ queryKey: issueChatKeys.list(status, depotId), queryFn: () => api<IssueChatSummary[]>(`/issue-chats${qs({ status, depotId })}`), staleTime: 5_000, enabled })
 
 export const useIssueChatThread = (chatId: string | null) =>
   useQuery({ queryKey: issueChatKeys.thread(chatId ?? "-"), queryFn: () => api<IssueChatDetail>(`/issue-chats/${chatId}`), enabled: !!chatId, staleTime: 0 })

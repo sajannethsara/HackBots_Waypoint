@@ -144,10 +144,28 @@ export class IssueChatService {
 
   // ───────────────────────────── Reading ─────────────────────────────
 
-  async list(user: SessionUser, q: { status?: string }): Promise<IssueChatSummary[]> {
+  /**
+   * Issues raised before group chats existed (or by live monitoring) have no room yet. The dispatcher's
+   * inbox should list every open issue, so give those their chat, quietly. At most once a minute per depot.
+   */
+  private lastBackfill = new Map<string, number>()
+  private async backfill(depotId: string) {
+    if (Date.now() - (this.lastBackfill.get(depotId) ?? 0) < 60_000) return
+    this.lastBackfill.set(depotId, Date.now())
+    const missing = await this.db.issue.findMany({
+      where: { status: { not: "RESOLVED" }, chat: null, OR: [{ trip: { plan: { depotId } } }, { outlet: { depotId } }, { vehicle: { depotId } }, { order: { depotId } }] },
+      select: { id: true },
+      take: 50,
+    })
+    for (const i of missing) await this.ensure(i.id, { notify: false }).catch(() => undefined)
+  }
+
+  async list(user: SessionUser, q: { status?: string; depotId?: string }): Promise<IssueChatSummary[]> {
+    const depotId = q.depotId || user.depotId
+    if (user.role === "DISPATCHER" && depotId) await this.backfill(depotId)
     const where: Prisma.IssueChatWhereInput = {
       AND: [
-        user.role === "DISPATCHER" ? { depotId: user.depotId ?? "-" } : { members: { some: { userId: user.sub } } },
+        user.role === "DISPATCHER" ? { depotId: depotId ?? "-" } : { members: { some: { userId: user.sub } } },
         q.status === "closed" ? { closedAt: { not: null } } : q.status === "all" ? {} : { closedAt: null },
       ],
     }
@@ -188,7 +206,7 @@ export class IssueChatService {
   // ───────────────────────────── Writing ─────────────────────────────
 
   async send(user: SessionUser, chatId: string, input: IssueChatMessageInput): Promise<IssueChatMessageDto> {
-    if (!canPostIssueChat(user.role)) throw new ForbiddenException("Dispatch changes the issue status; the people it affects do the talking")
+    if (!canPostIssueChat(user.role)) throw new ForbiddenException("You cannot post in this chat")
     const chat = await this.access(user, chatId)
     if (chat.closedAt) throw new ConflictException("This chat is closed")
 
@@ -364,7 +382,8 @@ export class IssueChatService {
 
   private async access(user: SessionUser, chatId: string): Promise<ChatRow> {
     const chat = await this.db.issueChat.findFirst({
-      where: { id: chatId, ...(user.role === "DISPATCHER" ? { depotId: user.depotId ?? "-" } : { members: { some: { userId: user.sub } } }) },
+      // Dispatchers work across depots (the depot switcher), so they reach any issue chat; members only their own.
+      where: { id: chatId, ...(user.role === "DISPATCHER" ? {} : { members: { some: { userId: user.sub } } }) },
       include: summaryInclude(user.sub),
     })
     if (!chat) throw new NotFoundException("Chat not found") // also hides other people's chats
@@ -405,8 +424,8 @@ export class IssueChatController {
   constructor(private readonly chats: IssueChatService) {}
 
   @Get()
-  list(@CurrentUser() user: SessionUser, @Query("status") status?: string) {
-    return this.chats.list(user, { status })
+  list(@CurrentUser() user: SessionUser, @Query("status") status?: string, @Query("depotId") depotId?: string) {
+    return this.chats.list(user, { status, depotId })
   }
 
   @Get("by-issue/:issueId")

@@ -1,24 +1,25 @@
 "use client"
 
 import { lazy, Suspense } from "react"
-import { Headset, MapIcon, MessageSquareWarning, Route, UserRound, WifiOff, type LucideIcon } from "lucide-react"
-import { Logo } from "@/components/brand/logo"
+import { Bell, MapIcon, TriangleAlert, Route, UserRound, WifiOff, type LucideIcon } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
 import { ChatProvider, useUnread } from "@/features/chat/use-chat"
 import { cn } from "@/lib/utils"
 import { Gate } from "./gate"
+import { TransparentLogo } from "./transparent-logo"
 import { DriverProvider, useDriver } from "./lib/driver-provider"
 import { NavigationProvider } from "./lib/navigation-provider"
-import { loadInbox, loadIssueChat, loadMapScreen, loadReportIssue, loadStopFlow } from "./lib/lazy"
+import { loadDispatchChat, loadIssueChat, loadMapScreen, loadReportIssue, loadStopFlow } from "./lib/lazy"
 import { NavProvider, useNav, type Tab } from "./nav"
+import { AlertsScreen } from "./screens/alerts-screen"
 import { HomeScreen } from "./screens/home-screen"
 import { IssuesScreen } from "./screens/issues-screen"
 import { MeScreen } from "./screens/me-screen"
-import { linkState, SyncChip } from "./ui"
+import { linkState, SyncIcon } from "./ui"
 import { TagBadge } from "@/components/shared/badges"
 
 const MapScreen = lazy(loadMapScreen)
-const InboxScreen = lazy(loadInbox)
+const DispatchChat = lazy(loadDispatchChat)
 const StopFlow = lazy(() => loadStopFlow().then((m) => ({ default: m.StopFlow })))
 const IssueChatScreen = lazy(() => loadIssueChat().then((m) => ({ default: m.IssueChatScreen })))
 const ReportIssue = lazy(() => loadReportIssue().then((m) => ({ default: m.ReportIssue })))
@@ -26,8 +27,8 @@ const ReportIssue = lazy(() => loadReportIssue().then((m) => ({ default: m.Repor
 const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "trip", label: "Trip", icon: Route },
   { id: "map", label: "Map", icon: MapIcon },
-  { id: "issues", label: "Issues", icon: MessageSquareWarning },
-  { id: "inbox", label: "Dispatch", icon: Headset },
+  { id: "issues", label: "Issues", icon: TriangleAlert },
+  { id: "alerts", label: "Alerts", icon: Bell },
   { id: "me", label: "Me", icon: UserRound },
 ]
 
@@ -62,11 +63,11 @@ function Shell({ mapboxToken }: { mapboxToken?: string }) {
   return (
     <div className="fixed inset-0 flex flex-col bg-muted/30 select-none [&_input]:select-text [&_textarea]:select-text">
       <header className="z-20 flex h-12 shrink-0 items-center gap-2 border-b bg-background/90 px-3 pt-[env(safe-area-inset-top)] backdrop-blur" style={{ height: "calc(3rem + env(safe-area-inset-top))" }}>
-        <Logo compact />
-        <span className="text-sm font-semibold tracking-[0.18em] text-primary">WAYPOINT</span>
+        <TransparentLogo className="size-8 dark:brightness-[1.9]" />
+        {/* <span className="text-sm font-semibold tracking-[0.18em] text-primary dark:text-emerald-400">WAYPOINT</span> */}
         <div className="ml-auto flex items-center gap-2">
           {d.config.demo && <TagBadge tone="violet">Demo</TagBadge>}
-          <SyncChip state={state} onClick={() => setTab("me")} />
+          <SyncIcon state={state} onClick={() => setTab("me")} />
         </div>
       </header>
 
@@ -90,32 +91,39 @@ function Shell({ mapboxToken }: { mapboxToken?: string }) {
             </Suspense>
           </div>
         )}
-        {seen.has("inbox") && (
-          <div className={cn(pane("inbox"), "overflow-hidden")}>
-            <Suspense fallback={<Loading />}>
-              <InboxScreen />
-            </Suspense>
-          </div>
-        )}
         <div className={pane("issues")}>
           <IssuesScreen />
+        </div>
+        <div className={pane("alerts")}>
+          <AlertsScreen />
         </div>
         <div className={pane("me")}>
           <MeScreen />
         </div>
       </main>
 
-      <nav className="z-20 grid shrink-0 grid-cols-5 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label="Main">
+      <nav
+        className="relative z-20 grid shrink-0 grid-cols-5 rounded-t-[1.75rem] border-t bg-background px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-8px_28px_-12px_rgb(0_0_0/0.18)]"
+        aria-label="Main"
+      >
         {TABS.map((t) => {
           const on = tab === t.id
-          const badge = t.id === "inbox" ? (unread?.unread ?? 0) : t.id === "issues" ? issueUnread : t.id === "me" ? d.failed.length : 0
+          const badge = t.id === "issues" ? issueUnread + (unread?.unread ?? 0) : t.id === "me" ? d.failed.length : 0
           return (
-            <button key={t.id} type="button" onClick={() => setTab(t.id)} aria-current={on ? "page" : undefined} className={cn("relative flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors", on ? "text-primary" : "text-muted-foreground active:text-foreground")}>
-              <span className={cn("grid h-7 w-12 place-items-center rounded-full transition-colors", on && "bg-primary/10")}>
-                <t.icon className="size-5" />
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              aria-current={on ? "page" : undefined}
+              className={cn("relative mx-0.5 flex h-14 flex-col items-center justify-center gap-1 rounded-2xl text-[11px] leading-none font-medium transition-colors duration-200", on ? "bg-primary/12 text-primary" : "text-muted-foreground active:bg-muted")}
+            >
+              <span className="relative grid h-6 w-10 place-items-center">
+                <t.icon className="size-[22px]" strokeWidth={on ? 2.25 : 1.75} />
+                {badge > 0 && (
+                  <span className="absolute -top-0.5 right-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-destructive px-1 text-[10px] leading-none font-semibold text-white ring-2 ring-background">{badge > 9 ? "9+" : badge}</span>
+                )}
               </span>
               {t.label}
-              {badge > 0 && <span className="absolute top-1.5 left-1/2 ml-2 grid min-w-4 place-items-center rounded-full bg-destructive px-1 text-[10px] leading-4 text-white">{badge}</span>}
             </button>
           )
         })}
@@ -124,6 +132,7 @@ function Shell({ mapboxToken }: { mapboxToken?: string }) {
       <Suspense fallback={<Loading overlay />}>
         {overlay?.kind === "stop" && <StopFlow key={overlay.stopId} stopId={overlay.stopId} onClose={close} onReport={() => openIssue(overlay.stopId)} />}
         {overlay?.kind === "issue" && <ReportIssue stopId={overlay.stopId} onClose={close} />}
+        {overlay?.kind === "dispatch" && <DispatchChat onClose={close} />}
         {overlay?.kind === "chat" && <IssueChatScreen key={overlay.issueId} issueId={overlay.issueId} onClose={close} />}
       </Suspense>
     </div>

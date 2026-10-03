@@ -126,11 +126,9 @@ export function IssueChatView({
         <p className="border-t bg-muted/40 px-3 py-2.5 text-center text-xs text-muted-foreground">
           {closed
             ? "This chat is closed. You can still read it."
-            : viewerRole === "DISPATCHER"
-              ? "Dispatch view: the people involved talk here. You update the issue status and close the chat."
-              : detail
-                ? "You can read this chat but not post."
-                : ""}
+            : detail
+              ? "You can read this chat but not post."
+              : ""}
         </p>
       )}
     </div>

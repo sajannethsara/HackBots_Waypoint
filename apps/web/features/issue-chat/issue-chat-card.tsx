@@ -18,11 +18,25 @@ import { IssueChatPane, useCloseIssueChat, useIssueChatId, useIssueChatThread } 
  */
 export function IssueChatCard({ issueId, bare, className }: { issueId: string; /** Render without the outer card (inside a tab). */ bare?: boolean; className?: string }) {
   const id = useIssueChatId(issueId)
+  if (id.isError)
+    return (
+      <div className="grid gap-2 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+        <p>The issue chat could not be opened.</p>
+        <Button size="xs" variant="outline" className="mx-auto" onClick={() => id.refetch()}>
+          Try again
+        </Button>
+      </div>
+    )
   if (id.isLoading || !id.data) return <Skeleton className="h-96 rounded-xl" />
   return <ChatCard chatId={id.data} bare={bare} className={className} />
 }
 
-function ChatCard({ chatId, bare, className }: { chatId: string; bare?: boolean; className?: string }) {
+/** The chat for a known chat id. `fill` stretches it to the height of its container (the inbox pane). */
+export function IssueChatPanel({ chatId, fill, className }: { chatId: string; fill?: boolean; className?: string }) {
+  return <ChatCard chatId={chatId} bare={!fill} fill={fill} className={className} />
+}
+
+function ChatCard({ chatId, bare, fill, className }: { chatId: string; bare?: boolean; fill?: boolean; className?: string }) {
   const { data } = useIssueChatThread(chatId)
   const close = useCloseIssueChat(chatId)
   const remove = useRemoveFromIssueChat(chatId)
@@ -70,10 +84,18 @@ function ChatCard({ chatId, bare, className }: { chatId: string; bare?: boolean;
   )
 
   const body = (
-    <div className={cn("flex min-h-0 flex-1 flex-col", bare ? "h-112" : "h-96")}>
+    <div className={cn("flex min-h-0 flex-1 flex-col", !fill && (bare ? "h-112" : "h-96"))}>
       <IssueChatPane chatId={chatId} />
     </div>
   )
+
+  if (fill)
+    return (
+      <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
+        {header}
+        {body}
+      </div>
+    )
 
   if (bare)
     return (
