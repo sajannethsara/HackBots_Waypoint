@@ -416,41 +416,40 @@ model RoadCondition {
 // ─────────────────────────────── Identity ───────────────────────────────
 
 model User {
-  id                String   @id @default(cuid())
-  email             String   @unique
-  name              String
-  phone             String?
-  passwordHash      String
-  role              Role
-  depotId           String? // dispatcher / loader scope
-  depot             Depot?   @relation(fields: [depotId], references: [id])
-  outletId          String? // store manager scope
-  outlet            Outlet?  @relation(fields: [outletId], references: [id])
-  vehicleId         String?  @unique // driver's assigned vehicle
-  vehicle           Vehicle? @relation("DriverVehicle", fields: [vehicleId], references: [id])
-  isActive          Boolean  @default(true)
-  notificationPrefs Json? // { orders, deliveries, issues, messages } booleans; missing means everything on
-  createdAt         DateTime @default(now()) @db.Timestamptz
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  phone        String?
+  passwordHash String
+  role         Role
+  depotId      String? // dispatcher / loader scope
+  depot        Depot?   @relation(fields: [depotId], references: [id])
+  outletId     String? // store manager scope
+  outlet       Outlet?  @relation(fields: [outletId], references: [id])
+  vehicleId    String?  @unique // driver's assigned vehicle
+  vehicle      Vehicle? @relation("DriverVehicle", fields: [vehicleId], references: [id])
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz
 
-  ordersCreated         Order[]               @relation("OrderCreatedBy")
-  plansPublished        Plan[]                @relation("PlanPublishedBy")
-  decisionsMade         PlanDecision[]        @relation("DecisionOverriddenBy")
-  tripsLoaded           Trip[]                @relation("TripLoadedBy")
-  tripsClaimed          Trip[]                @relation("TripClaimedBy")
-  linesCounted          LoadLine[]            @relation("LoadLineCountedBy")
-  tripsDriven           Trip[]                @relation("TripDriver")
-  tripsLoading          Trip[]                @relation("TripLoader")
-  deliveryEvents        DeliveryEvent[]
-  locations             DriverLocation[]
-  issueChatMembers      IssueChatMember[]
-  issueChatMessages     IssueChatMessage[]
-  issuesReported        Issue[]               @relation("IssueReportedBy")
-  issuesResolved        Issue[]               @relation("IssueResolvedBy")
-  receipts              Receipt[]
-  notifications         Notification[]
-  auditLogs             AuditLog[]
-  conversations         Conversation[]        @relation("ConversationMember")
-  messagesSent          Message[]             @relation("MessageSender")
+  ordersCreated     Order[]            @relation("OrderCreatedBy")
+  plansPublished    Plan[]             @relation("PlanPublishedBy")
+  decisionsMade     PlanDecision[]     @relation("DecisionOverriddenBy")
+  tripsLoaded       Trip[]             @relation("TripLoadedBy")
+  tripsClaimed      Trip[]             @relation("TripClaimedBy")
+  linesCounted      LoadLine[]         @relation("LoadLineCountedBy")
+  tripsDriven       Trip[]             @relation("TripDriver")
+  tripsLoading      Trip[]             @relation("TripLoader")
+  deliveryEvents    DeliveryEvent[]
+  locations         DriverLocation[]
+  issueChatMembers  IssueChatMember[]
+  issueChatMessages IssueChatMessage[]
+  issuesReported    Issue[]            @relation("IssueReportedBy")
+  issuesResolved    Issue[]            @relation("IssueResolvedBy")
+  receipts          Receipt[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  conversations     Conversation[]     @relation("ConversationMember")
+  messagesSent      Message[]          @relation("MessageSender")
   changeRequestsMade    OutletChangeRequest[] @relation("ChangeRequestedBy")
   changeRequestsDecided OutletChangeRequest[] @relation("ChangeDecidedBy")
 }
