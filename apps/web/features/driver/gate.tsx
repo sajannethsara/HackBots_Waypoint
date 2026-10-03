@@ -13,6 +13,7 @@ import { fetchBundle, fetchMe, OfflineError, SessionError } from "./lib/driver-a
 import { kvGet, kvSet } from "./lib/idb"
 import { preloadAll } from "./lib/lazy"
 import { currentTrip } from "./lib/model"
+import { useInstall } from "./lib/use-install"
 import { cacheLoadedAssets, registerServiceWorker, warmMapTiles, type SwState } from "./lib/offline"
 
 /**
@@ -30,6 +31,7 @@ interface StepState {
 const STAMP_KEY = "ready"
 const UID_KEY = "wp_driver_uid"
 const FRESH_MS = 12 * 60 * 60 * 1000
+const SKIP_INSTALL_KEY = "wp_skip_install"
 
 export interface Booted {
   userId: string
@@ -171,11 +173,28 @@ export function Gate({ mapboxToken, children }: { mapboxToken?: string; children
     setBootObj({ userId, name: who, bundle })
   }, [mapboxToken, router, set])
 
+  // Installing comes first: the installed app opens full screen and keeps working offline.
+  // Skipped once per browser session; already-installed phones never see this step.
+  const pwa = useInstall()
+  const [skipInstall, setSkipInstall] = useState(false)
   useEffect(() => {
-    if (started.current) return
+    try {
+      if (sessionStorage.getItem(SKIP_INSTALL_KEY)) setSkipInstall(true)
+    } catch {}
+  }, [])
+  const needsInstall = !pwa.installed && !skipInstall
+  const skip = () => {
+    try {
+      sessionStorage.setItem(SKIP_INSTALL_KEY, "1")
+    } catch {}
+    setSkipInstall(true)
+  }
+
+  useEffect(() => {
+    if (started.current || !pwa.checked || needsInstall) return
     started.current = true
     void run()
-  }, [run])
+  }, [run, pwa.checked, needsInstall])
 
   // Continue automatically when nothing needs the driver's attention.
   const allGood = bootObj && Object.values(steps).every((s) => s.status === "ok")
@@ -187,6 +206,9 @@ export function Gate({ mapboxToken, children }: { mapboxToken?: string; children
   }, [allGood, bootObj])
 
   if (booted) return <>{children(booted)}</>
+
+  if (!pwa.checked) return <main className="min-h-svh bg-muted/30" />
+  if (needsInstall) return <InstallStep pwa={pwa} onSkip={skip} />
 
   const allowLocation = () => {
     navigator.geolocation.getCurrentPosition(
@@ -261,6 +283,46 @@ export function Gate({ mapboxToken, children }: { mapboxToken?: string; children
             </Button>
           </div>
         ) : null}
+      </div>
+    </main>
+  )
+}
+
+function InstallStep({ pwa, onSkip }: { pwa: ReturnType<typeof useInstall>; onSkip: () => void }) {
+  const how =
+    pwa.platform === "ios"
+      ? ["Tap the Share button in Safari", "Choose “Add to Home Screen”", "Open Waypoint from your home screen"]
+      : ["Open the browser menu (⋮)", "Choose “Install app” or “Add to Home screen”", "Open Waypoint from your home screen"]
+
+  return (
+    <main className="flex min-h-svh flex-col bg-muted/30 px-5 pt-[max(2rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6">
+        <div className="grid justify-items-center gap-2 text-center">
+          <Wordmark />
+          <h1 className="mt-4 text-lg font-semibold tracking-tight">Install Waypoint</h1>
+          <p className="text-sm text-muted-foreground">
+            Install the app on this phone so it opens full screen and keeps working when the signal drops.
+          </p>
+        </div>
+
+        {pwa.canInstall ? (
+          <Button className="h-12 text-base" onClick={() => void pwa.install()}>
+            <Download data-icon="inline-start" /> Install app
+          </Button>
+        ) : (
+          <ol className="grid gap-1 rounded-xl border bg-card p-1.5">
+            {how.map((t, i) => (
+              <li key={t} className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm">
+                <span className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">{i + 1}</span>
+                {t}
+              </li>
+            ))}
+          </ol>
+        )}
+
+        <Button variant="ghost" className="h-10 text-muted-foreground" onClick={onSkip}>
+          Not now, continue in browser
+        </Button>
       </div>
     </main>
   )

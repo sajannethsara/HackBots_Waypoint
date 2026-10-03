@@ -128,6 +128,12 @@ export interface Trip {
   loadWeightKg: number
   loadVolumeM3: number
   driver: { id: string; name: string } | null
+  loader: { id: string; name: string } | null
+  /** Depot gate */
+  driverClaimedAt: string | null
+  loaderClaimedAt: string | null
+  heldAt: string | null
+  liveAt: string | null
   stops: Stop[]
 }
 

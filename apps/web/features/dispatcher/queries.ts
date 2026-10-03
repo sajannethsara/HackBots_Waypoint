@@ -66,6 +66,8 @@ export function useCurrentPlan() {
     queryKey: keys.plan(depotId, date),
     queryFn: () => api<Plan | null>(`/plans/current${qs({ depotId, date })}`),
     enabled: ready,
+    // Once published the depot gate moves on its own (claims, auto-start), so keep it fresh.
+    refetchInterval: (q) => (q.state.data?.status === "PUBLISHED" ? 4_000 : false),
   })
 }
 
@@ -355,4 +357,21 @@ export function useDistricts() {
     enabled: ready,
     staleTime: 10 * 60_000,
   })
+}
+
+/** Depot gate actions on a published trip. */
+function useGateAction(action: "start" | "hold" | "release", ok: string) {
+  const sync = usePlanCache()
+  return useMutation({
+    mutationFn: (tripId: string) => api<{ ok: true }>(`/gate/trips/${tripId}/${action}`, { method: "POST" }),
+    onSuccess: () => {
+      sync()
+      toast.success(ok)
+    },
+    onError,
+  })
+}
+
+export function useGate() {
+  return { start: useGateAction("start", "Trip is live"), hold: useGateAction("hold", "Trip held at the depot"), release: useGateAction("release", "Hold lifted") }
 }

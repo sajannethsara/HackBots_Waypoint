@@ -171,6 +171,8 @@ export class LiveService {
         orderBy: { version: "desc" },
         include: {
           trips: {
+            // Depot gate: a trip is on the live board once dispatch has let it out (or the driver already departed).
+            where: { OR: [{ liveAt: { not: null } }, { departedAt: { not: null } }] },
             orderBy: { ref: "asc" },
             include: {
               vehicle: true,

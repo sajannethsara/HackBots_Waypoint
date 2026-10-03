@@ -43,6 +43,7 @@ const planInclude = {
       vehicle: true,
       district: { select: { id: true, centroidLat: true, centroidLng: true } },
       driver: { select: { id: true, name: true } },
+      loader: { select: { id: true, name: true } },
       stops: {
         orderBy: { seq: "asc" },
         include: {

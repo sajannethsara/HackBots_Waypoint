@@ -378,6 +378,7 @@ model User {
   decisionsMade     PlanDecision[]     @relation("DecisionOverriddenBy")
   tripsLoaded       Trip[]             @relation("TripLoadedBy")
   tripsDriven       Trip[]             @relation("TripDriver")
+  tripsLoading      Trip[]             @relation("TripLoader")
   deliveryEvents    DeliveryEvent[]
   locations         DriverLocation[]
   issueChatMembers  IssueChatMember[]
@@ -530,6 +531,13 @@ model Trip {
   /// Road geometry from Google Routes: { source, legs: [[lat,lng]...][], km, min, computedAt }
   route              Json?
   driver             User?             @relation("TripDriver", fields: [driverId], references: [id])
+  /// Depot gate: both crew claim the trip, then the dispatcher starts it (or it starts itself a minute later). Held trips stay off the live board.
+  driverClaimedAt    DateTime?         @db.Timestamptz
+  loaderId           String?
+  loader             User?             @relation("TripLoader", fields: [loaderId], references: [id])
+  loaderClaimedAt    DateTime?         @db.Timestamptz
+  heldAt             DateTime?         @db.Timestamptz
+  liveAt             DateTime?         @db.Timestamptz
   updatedAt          DateTime          @updatedAt @db.Timestamptz
   departedAt         DateTime?         @db.Timestamptz
   completedAt        DateTime?         @db.Timestamptz
