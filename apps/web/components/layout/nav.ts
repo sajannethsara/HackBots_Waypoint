@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   Archive,
   BarChart3,
+  Building2,
   CircleAlert,
   CircleCheck,
   ClipboardList,
@@ -9,6 +10,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   MessagesSquare,
+  Package,
   Radar,
   Route,
   Settings,
@@ -88,12 +90,44 @@ export const NAV: Record<Role, NavGroup[]> = {
     { label: "Account", items: [{ title: "Settings", href: "/loader/settings", icon: Settings }] },
   ],
   DRIVER: [{ label: "Road", items: [{ title: "Inbox", href: "/driver", icon: MessagesSquare, badgeKey: "inbox" }] }],
-  STORE_MANAGER: [{ label: "Outlet", items: [{ title: "Inbox", href: "/store", icon: MessagesSquare, badgeKey: "inbox" }] }],
+  STORE_MANAGER: [
+    {
+      label: "Overview",
+      items: [
+        { title: "Dashboard", href: "/store-manager", icon: LayoutDashboard },
+        { title: "Inbox", href: "/store-manager/inbox", icon: MessagesSquare, badgeKey: "inbox" },
+      ],
+    },
+    {
+      label: "Ordering",
+      items: [
+        {
+          title: "Orders",
+          href: "/store-manager/orders",
+          icon: ClipboardList,
+          children: [
+            { title: "My Orders", href: "/store-manager/orders" },
+            { title: "Create Order", href: "/store-manager/orders/new" },
+          ],
+        },
+        { title: "Deliveries", href: "/store-manager/deliveries", icon: Truck },
+        { title: "Issues", href: "/store-manager/issues", icon: CircleAlert },
+        { title: "Inventory", href: "/store-manager/inventory", icon: Package, soon: true },
+      ],
+    },
+    {
+      label: "Outlet",
+      items: [
+        { title: "Outlet Profile", href: "/store-manager/profile", icon: Building2 },
+        { title: "Settings", href: "/store-manager/settings", icon: Settings },
+      ],
+    },
+  ],
 }
 
 export const HOME: Record<Role, string> = {
   DISPATCHER: "/dispatcher",
   LOADER: "/loader",
   DRIVER: "/driver",
-  STORE_MANAGER: "/store",
+  STORE_MANAGER: "/store-manager",
 }
