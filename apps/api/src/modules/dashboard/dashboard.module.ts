@@ -22,11 +22,11 @@ export class DashboardService {
           decisions: { select: { decision: true, reason: true, consecutiveDefers: true, order: { select: { outletId: true, temp: true, brand: true } } } },
         },
       }),
-      this.db.order.findMany({ where: { depotId, OR: [{ deliveryDate: day }, { decisions: { some: { plan: { date: day, depotId } } } }] }, select: { brand: true, temp: true, status: true } }),
+      this.db.order.findMany({ where: { depotId, status: { not: "DRAFT" }, OR: [{ deliveryDate: day }, { decisions: { some: { plan: { date: day, depotId } } } }] }, select: { brand: true, temp: true, status: true } }),
       this.db.vehicle.findMany({ where: { depotId }, select: { id: true, status: true, temp: true, type: true } }),
       this.db.issue.findMany({ where: { status: { not: "RESOLVED" }, OR: [{ trip: { plan: { depotId, date: day } } }, { outlet: { depotId } }] }, orderBy: { createdAt: "desc" }, take: 20, select: { id: true, ref: true, type: true, severity: true, stage: true, description: true, createdAt: true, tripId: true } }),
       this.db.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 8, include: { actor: { select: { name: true } } } }),
-      this.db.order.count({ where: { depotId, deliveryDate: day, deferCount: { gte: 1 } } }),
+      this.db.order.count({ where: { depotId, status: { not: "DRAFT" }, deliveryDate: day, deferCount: { gte: 1 } } }),
     ])
 
     const decisions = plan?.decisions ?? []

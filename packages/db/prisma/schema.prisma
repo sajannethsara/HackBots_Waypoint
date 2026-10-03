@@ -72,6 +72,7 @@ enum TempRequirement {
 }
 
 enum OrderStatus {
+  DRAFT // saved by the store, not yet submitted; invisible to dispatch
   SUBMITTED // confirmed before cutoff, waiting for planning
   PLANNED // on a published plan
   DEFERRED // moved to a later run

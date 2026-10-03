@@ -10,6 +10,7 @@ import { readCsv } from "./csv"
 import { DEMO_DATE, seedDemoDay } from "./demo-day"
 import { seedDemand } from "./demand"
 import { seedIssues, seedSystemUser } from "./issues"
+import { seedStoreHistory } from "./store-history"
 import { seedReference } from "./reference"
 import { DEMO_ACCOUNTS, DEMO_PASSWORD, seedUsers } from "./users"
 
@@ -46,6 +47,7 @@ async function main() {
   console.log("✓ users")
   const day = await seedDemoDay(db)
   console.log(`✓ demo day ${DEMO_DATE}: ${day.peliyagoda} Peliyagoda + ${day.kandy} Kandy orders`)
+  console.log(`✓ ${await seedStoreHistory(db)} past and draft orders for the store app`)
   console.log(`✓ ${await seedIssues(db)} open/recent field issues`)
   const demand = await seedDemand(db, DEMO_DATE)
   console.log(`✓ demand history (${demand.weeks} depot-brand-weeks) + ${demand.forecasts} baseline forecasts`)

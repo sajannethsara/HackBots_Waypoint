@@ -1,7 +1,5 @@
-import { MemberWorkspace } from "@/features/chat/member-workspace"
-
-export const dynamic = "force-dynamic"
+import { StoreDashboard } from "@/features/store/dashboard/store-dashboard"
 
 export default function Page() {
-  return <MemberWorkspace wsUrl={process.env.PUBLIC_WS_URL || undefined} />
+  return <StoreDashboard />
 }

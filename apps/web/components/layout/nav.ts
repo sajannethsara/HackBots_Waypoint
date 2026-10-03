@@ -1,14 +1,17 @@
 import {
   AlertTriangle,
   BarChart3,
+  Building2,
   CircleAlert,
   ClipboardList,
   Gauge,
   LayoutDashboard,
   type LucideIcon,
   MessagesSquare,
+  Package,
   Radar,
   Route,
+  Settings,
   Store,
   Truck,
   Workflow,
@@ -21,6 +24,8 @@ export interface NavItem {
   icon: LucideIcon
   badgeKey?: "exceptions" | "issues" | "inbox"
   soon?: boolean
+  /** Sub-links shown under the item (the parent link is also its first destination). */
+  children?: { title: string; href: string }[]
 }
 export interface NavGroup {
   label: string
@@ -70,7 +75,36 @@ export const NAV: Record<Role, NavGroup[]> = {
   ],
   LOADER: [{ label: "Dock", items: [{ title: "Inbox", href: "/loader", icon: MessagesSquare, badgeKey: "inbox" }] }],
   DRIVER: [{ label: "Road", items: [{ title: "Inbox", href: "/driver", icon: MessagesSquare, badgeKey: "inbox" }] }],
-  STORE_MANAGER: [{ label: "Outlet", items: [{ title: "Inbox", href: "/store", icon: MessagesSquare, badgeKey: "inbox" }] }],
+  STORE_MANAGER: [
+    {
+      label: "Overview",
+      items: [{ title: "Dashboard", href: "/store", icon: LayoutDashboard }],
+    },
+    {
+      label: "Ordering",
+      items: [
+        {
+          title: "Orders",
+          href: "/store/orders",
+          icon: ClipboardList,
+          children: [
+            { title: "My Orders", href: "/store/orders" },
+            { title: "Create Order", href: "/store/orders/new" },
+          ],
+        },
+        { title: "Deliveries", href: "/store/deliveries", icon: Truck },
+        { title: "Inventory", href: "/store/inventory", icon: Package, soon: true },
+      ],
+    },
+    {
+      label: "Outlet",
+      items: [
+        { title: "Outlet Profile", href: "/store/profile", icon: Building2 },
+        { title: "Settings", href: "/store/settings", icon: Settings },
+        { title: "Inbox", href: "/store/inbox", icon: MessagesSquare, badgeKey: "inbox" },
+      ],
+    },
+  ],
 }
 
 export const HOME: Record<Role, string> = {
