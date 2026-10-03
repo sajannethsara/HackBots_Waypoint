@@ -1,5 +1,5 @@
 import type { Brand, PrismaClient, TempRequirement } from "@prisma/client"
-import { addDays, dateOnly, toEnum } from "@waypoint/shared"
+import { addDays, dateOnly, formatOrderRef, toEnum } from "@waypoint/shared"
 import { readCsv } from "./csv"
 import { DEMO_DATE, makeLines } from "./demo-day"
 
@@ -23,12 +23,16 @@ export async function seedStoreHistory(db: PrismaClient) {
   }
 
   let count = 0
+  // History keeps the dataset's own delivery number (ORD0087541 -> ORD-0087541) so it traces back to the CSV.
+  let highest = 0
   for (const [outletId, all] of byOutlet) {
     const rows = all.sort((a, b) => b.dispatch_date.localeCompare(a.dispatch_date)).slice(0, PER_OUTLET)
     for (const [i, r] of rows.entries()) {
       const brand = toEnum<Brand>(r.brand)
       const temp = toEnum<TempRequirement>(r.temp_requirement)
-      const ref = `H-${r.delivery_id.replace(/^ORD/, "")}`
+      const num = Number(r.delivery_id.replace(/^\D+/, ""))
+      highest = Math.max(highest, num)
+      const ref = formatOrderRef(num)
       const cancelled = i === 3
       const confirmedById = managers.get(outletId)!
       const created = await db.order.create({
@@ -65,7 +69,7 @@ export async function seedStoreHistory(db: PrismaClient) {
   // Unsent drafts for the demo store (OUT001), dated after the demo day.
   const demo = await db.outlet.findUniqueOrThrow({ where: { id: "OUT001" } })
   for (const [i, days] of [2, 5].entries()) {
-    const ref = `DRF-OUT001-${i + 1}`
+    const ref = formatOrderRef(++highest)
     const units = 10 + i * 6
     await db.order.create({
       data: {
@@ -87,5 +91,12 @@ export async function seedStoreHistory(db: PrismaClient) {
     })
     count++
   }
+
+  // The Kandy demo-day orders (made up by the seed, no number in the CSV) continue after the history.
+  const kandy = await db.order.findMany({ where: { ref: { startsWith: "K-" } }, orderBy: { ref: "asc" }, select: { id: true } })
+  for (const k of kandy) await db.order.update({ where: { id: k.id }, data: { ref: formatOrderRef(++highest) } })
+
+  // Orders created in the app take the next number from the sequence, past everything seeded.
+  await db.$executeRaw`SELECT setval('order_ref_seq', ${highest + 1}, false)`
   return count
 }

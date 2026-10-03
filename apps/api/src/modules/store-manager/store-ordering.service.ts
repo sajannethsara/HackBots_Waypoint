@@ -3,6 +3,7 @@ import type { Prisma } from "@waypoint/db"
 import {
   addDays,
   dateOnly,
+  formatOrderRef,
   minToHHMM,
   RULES,
   toDateOnly,
@@ -287,17 +288,16 @@ export class StoreOrderingService {
     return id
   }
 
-  /** Next ORD-000123 reference; retries if two requests race for the same number. */
+  /** Creates the order with the next number from `order_ref_seq`, which is unique across every outlet. */
   private async insertOrder(
     tx: Prisma.TransactionClient,
     user: SessionUser,
     outlet: { id: string; brand: Prisma.OrderUncheckedCreateInput["brand"]; depotId: string },
     data: Omit<Prisma.OrderUncheckedCreateInput, "ref" | "outletId" | "brand" | "depotId" | "createdById">,
   ) {
-    const last = await tx.order.findFirst({ where: { ref: { startsWith: "ORD-" } }, orderBy: { ref: "desc" }, select: { ref: true } })
-    const next = (last ? Number(last.ref.slice(4)) : 0) + 1
+    const [{ n }] = await tx.$queryRaw<{ n: bigint }[]>`SELECT nextval('order_ref_seq') AS n`
     const order = await tx.order.create({
-      data: { ...data, ref: `ORD-${String(next).padStart(6, "0")}`, outletId: outlet.id, brand: outlet.brand, depotId: outlet.depotId, createdById: user.sub },
+      data: { ...data, ref: formatOrderRef(Number(n)), outletId: outlet.id, brand: outlet.brand, depotId: outlet.depotId, createdById: user.sub },
       select: { id: true },
     })
     return order.id

@@ -169,3 +169,6 @@ export const cancelStoreOrderSchema = z.object({
   note: z.string().trim().max(300).optional(),
 })
 export type CancelStoreOrderInput = z.infer<typeof cancelStoreOrderSchema>
+
+/** The one format for order references the system hands out: ORD-0000123. (S1-… refs belong to the challenge scenario.) */
+export const formatOrderRef = (n: number) => `ORD-${String(n).padStart(7, "0")}`
