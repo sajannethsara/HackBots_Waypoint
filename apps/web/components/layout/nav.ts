@@ -78,7 +78,10 @@ export const NAV: Record<Role, NavGroup[]> = {
   STORE_MANAGER: [
     {
       label: "Overview",
-      items: [{ title: "Dashboard", href: "/store-manager", icon: LayoutDashboard }],
+      items: [
+        { title: "Dashboard", href: "/store-manager", icon: LayoutDashboard },
+        { title: "Inbox", href: "/store-manager/inbox", icon: MessagesSquare, badgeKey: "inbox" },
+      ],
     },
     {
       label: "Ordering",
@@ -102,7 +105,6 @@ export const NAV: Record<Role, NavGroup[]> = {
       items: [
         { title: "Outlet Profile", href: "/store-manager/profile", icon: Building2 },
         { title: "Settings", href: "/store-manager/settings", icon: Settings },
-        { title: "Inbox", href: "/store-manager/inbox", icon: MessagesSquare, badgeKey: "inbox" },
       ],
     },
   ],
