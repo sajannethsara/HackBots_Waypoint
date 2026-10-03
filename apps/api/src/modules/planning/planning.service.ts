@@ -268,6 +268,24 @@ export class PlanningService {
     return this.get(planId)
   }
 
+  /**
+   * Removes an order from every open draft plan (its stop and its decision) and re-times the trip it was on.
+   * Used when a store cancels an order the dispatcher has drafted but not yet published.
+   */
+  async dropOrderFromDrafts(orderId: string) {
+    const decisions = await this.db.planDecision.findMany({
+      where: { orderId, plan: { status: "DRAFT" } },
+      select: { id: true, planId: true, plan: { select: { depotId: true, date: true } } },
+    })
+    for (const d of decisions) {
+      const stop = await this.db.stop.findFirst({ where: { orderId, trip: { planId: d.planId } } })
+      await this.db.$transaction([...(stop ? [this.db.stop.delete({ where: { id: stop.id } })] : []), this.db.planDecision.delete({ where: { id: d.id } })])
+      if (stop) await this.recomputeTrip(stop.tripId, d.plan.depotId, d.plan.date)
+      await this.refreshSummary(d.planId)
+    }
+    return decisions.length
+  }
+
   /** Dry-run of an assignment: which rules would break. Powers the constraint panel. */
   async checkAssign(planId: string, input: AssignOrderInput) {
     const plan = await this.db.plan.findUnique({ where: { id: planId } })
@@ -359,8 +377,8 @@ export class PlanningService {
           if (!userId) return []
           const hit = stopByOrder.get(d.orderId)
           return d.decision === "SERVED" && hit
-            ? [{ userId, type: "ORDER_SCHEDULED", title: `${d.order.ref} scheduled`, body: `Arriving around ${hhmm(hit.s.plannedArrivalMin)} on ${hit.t.ref} (${hit.t.vehicleId}).`, link: `/store/orders/${d.orderId}` }]
-            : [{ userId, type: "ORDER_DEFERRED", title: `${d.order.ref} moved to ${nextDay}`, body: d.explanation ?? "Deferred to the next run.", link: `/store/orders/${d.orderId}` }]
+            ? [{ userId, type: "ORDER_SCHEDULED", title: `${d.order.ref} scheduled`, body: `Arriving around ${hhmm(hit.s.plannedArrivalMin)} on ${hit.t.ref} (${hit.t.vehicleId}).`, link: `/store-manager/orders/${d.orderId}` }]
+            : [{ userId, type: "ORDER_DEFERRED", title: `${d.order.ref} moved to ${nextDay}`, body: d.explanation ?? "Deferred to the next run.", link: `/store-manager/orders/${d.orderId}` }]
         }),
       })
 

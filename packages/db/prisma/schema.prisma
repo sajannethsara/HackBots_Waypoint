@@ -72,6 +72,7 @@ enum TempRequirement {
 }
 
 enum OrderStatus {
+  DRAFT // saved by the store, not yet submitted; invisible to dispatch
   SUBMITTED // confirmed before cutoff, waiting for planning
   PLANNED // on a published plan
   DEFERRED // moved to a later run
@@ -187,6 +188,14 @@ enum ReceiptStatus {
   CONFIRMED
   CONFIRMED_WITH_ISSUES
   DISPUTED
+}
+
+// How the store found a received line
+enum LineCondition {
+  GOOD
+  DAMAGED
+  EXPIRED
+  WRONG_ITEM
 }
 
 enum MediaKind {
@@ -402,6 +411,7 @@ model Order {
   status          OrderStatus     @default(SUBMITTED)
   deferCount      Int             @default(0)
   notes           String?
+  windowPref      String? // store's preferred receiving slot, "HH:MM-HH:MM"; a preference, not a planner constraint
   submittedAt     DateTime        @default(now()) @db.Timestamptz
   updatedAt       DateTime        @updatedAt @db.Timestamptz
   createdById     String
@@ -416,16 +426,37 @@ model Order {
   @@index([outletId, deliveryDate])
 }
 
+// What a store can order. Unit weight/volume are calibrated to each brand's real average per unit.
+model Product {
+  id           String          @id @default(cuid())
+  sku          String          @unique
+  name         String
+  brand        Brand
+  category     String
+  temp         TempRequirement
+  unitLabel    String // "1 L pack", "carton", "each"
+  unitWeightKg Float
+  unitVolumeM3 Float
+  maxQty       Int             @default(200) // per order line
+  isActive     Boolean         @default(true)
+  lines        OrderLine[]
+
+  @@index([brand, temp, isActive])
+}
+
 model OrderLine {
   id            String         @id @default(cuid())
   orderId       String
   order         Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   description   String
   category      String // DAIRY, MEAT, PRODUCE, DRY, GARMENT, APPLIANCE ...
+  productId     String? // null for historical orders imported from the datathon CSVs
+  product       Product?       @relation(fields: [productId], references: [id])
   quantity      Int
   weightKg      Float
   volumeM3      Float
   deliveryLines DeliveryLine[]
+  receiptLines  ReceiptLine[]
   issues        Issue[]
 }
 
@@ -607,6 +638,22 @@ model Receipt {
   confirmedById String
   confirmedBy   User          @relation(fields: [confirmedById], references: [id])
   confirmedAt   DateTime      @default(now()) @db.Timestamptz
+  lines         ReceiptLine[]
+}
+
+// One row per order line when the store counts a delivery in. A shortage is receivedQty < expectedQty.
+model ReceiptLine {
+  id          String        @id @default(cuid())
+  receiptId   String
+  receipt     Receipt       @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  orderLineId String
+  orderLine   OrderLine     @relation(fields: [orderLineId], references: [id])
+  expectedQty Int // what the driver recorded as delivered (DeliveryLine.deliveredQty), the baseline for the count
+  receivedQty Int
+  condition   LineCondition @default(GOOD)
+  notes       String?
+
+  @@unique([receiptId, orderLineId])
 }
 
 // Single exception table for every role and stage

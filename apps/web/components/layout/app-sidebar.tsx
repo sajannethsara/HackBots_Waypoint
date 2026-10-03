@@ -27,6 +27,9 @@ import {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { useLogout, useMe } from "@/hooks/use-session"
@@ -39,6 +42,11 @@ export function AppSidebar({ role, badges = {} }: { role: Role; badges?: Partial
   const logout = useLogout()
   const { resolvedTheme, setTheme } = useTheme()
   const isActive = (href: string) => (href.split("/").length <= 2 ? pathname === href : pathname.startsWith(href))
+  // Sub-links: the most specific one that matches wins, so "/orders/new" does not also light up "/orders".
+  const activeChild = (children: { href: string }[]) =>
+    children
+      .filter((c) => pathname === c.href || pathname.startsWith(`${c.href}/`))
+      .sort((a, b) => b.href.length - a.href.length)[0]?.href
 
   return (
     <Sidebar collapsible="icon">
@@ -52,10 +60,11 @@ export function AppSidebar({ role, badges = {} }: { role: Role; badges?: Partial
             <SidebarMenu>
               {g.items.map((item) => {
                 const count = item.badgeKey ? badges[item.badgeKey] : undefined
+                const current = item.children ? activeChild(item.children) : undefined
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
-                      isActive={isActive(item.href)}
+                      isActive={item.children ? Boolean(current) : isActive(item.href)}
                       tooltip={item.title}
                       render={<Link href={item.href} />}
                       className="data-active:font-medium"
@@ -66,6 +75,17 @@ export function AppSidebar({ role, badges = {} }: { role: Role; badges?: Partial
                     </SidebarMenuButton>
                     {!!count && (
                       <SidebarMenuBadge className="rounded-full bg-destructive/10 text-destructive">{count}</SidebarMenuBadge>
+                    )}
+                    {item.children && (
+                      <SidebarMenuSub>
+                        {item.children.map((c) => (
+                          <SidebarMenuSubItem key={c.href}>
+                            <SidebarMenuSubButton isActive={current === c.href} render={<Link href={c.href} />}>
+                              <span>{c.title}</span>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
                     )}
                   </SidebarMenuItem>
                 )
