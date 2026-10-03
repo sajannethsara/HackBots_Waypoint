@@ -1,8 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { toast } from "sonner"
 import { ArrowDownUp, Clock, PackageMinus, PackageX, Send, TriangleAlert, Truck, type LucideIcon } from "lucide-react"
-import type { IssueType, LoaderStop, LoaderTrip } from "@waypoint/shared"
+import type { IssueType, LoaderIssueInput, LoaderStop, LoaderTrip } from "@waypoint/shared"
 import { TONE } from "@/components/shared/badges"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -14,8 +15,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { fmtNum } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { loadingOrder } from "./model"
+import { sentMessage, useReportIssue } from "./queries"
 
-type Kind = "missing" | "damaged" | "sequence" | "delay"
+type Kind = Exclude<LoaderIssueInput["kind"], "capacity">
 
 const KINDS: { id: Kind; type: IssueType; title: string; hint: string; icon: LucideIcon }[] = [
   { id: "missing", type: "LOAD_MISSING", title: "Missing items", hint: "Fewer units staged than the order needs", icon: PackageMinus },
@@ -37,7 +39,7 @@ interface AffectedLine {
 
 /**
  * Report a loading problem to dispatch, precise down to the order line and unit count.
- * The form is complete; submit stays disabled until the loader issue endpoint and its schema are final.
+ * The API raises one issue per affected item and writes the issue text itself from the same facts.
  * Mount with a `key` per stop so opening it from another stop starts a fresh form.
  */
 export function ReportIssueDialog({
@@ -59,6 +61,9 @@ export function ReportIssueDialog({
   const [delayMin, setDelayMin] = useState("")
   const [delayReason, setDelayReason] = useState(DELAY_REASONS[0])
   const [notes, setNotes] = useState("")
+  // One id per report: resubmitting after a network error cannot raise the same issues twice; a new one after each send.
+  const [clientId, setClientId] = useState(() => crypto.randomUUID())
+  const report = useReportIssue(trip.id)
 
   const sequence = loadingOrder(trip.stops)
   const stop = trip.stops.find((s) => s.id === stopId)
@@ -78,6 +83,31 @@ export function ReportIssueDialog({
     problems.length === 0
       ? describeIssue({ kind, trip, stop, position, total: sequence.length, affected, delayMin: Number(delayMin), delayReason, notes })
       : null
+
+  const send = () =>
+    report.mutate(
+      {
+        clientId,
+        kind,
+        tripId: trip.id,
+        stopId: kind === "delay" ? undefined : stopId,
+        lines: affected.map((a) => ({ orderLineId: a.line.id, units: a.units })),
+        delayMin: kind === "delay" ? Number(delayMin) : undefined,
+        delayReason: kind === "delay" ? delayReason : undefined,
+        notes: notes.trim() || undefined,
+      },
+      {
+        onSuccess: (r) => {
+          toast.success(sentMessage(r), { description: "Dispatch has been notified and an issue chat is open in your inbox." })
+          setClientId(crypto.randomUUID())
+          setPicked({})
+          setCounts({})
+          setNotes("")
+          onOpenChange(false)
+        },
+        onError: (err) => toast.error(err.message),
+      },
+    )
 
   const changeStop = (id: string) => {
     setStopId(id)
@@ -268,10 +298,8 @@ export function ReportIssueDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          {/* TODO: wire to POST /api/loader/issues once loader.service.ts reportIssue and packages/shared loaderIssueSchema are final.
-              It should carry `summary` plus the structured fields (type, stopId, affected line ids and unit counts, delay). */}
-          <Button disabled title="Reporting from the loader workspace is coming soon">
-            Send to dispatcher · coming soon
+          <Button onClick={send} disabled={!summary || report.isPending}>
+            <Send /> {report.isPending ? "Sending…" : "Send to dispatcher"}
           </Button>
         </DialogFooter>
       </DialogContent>

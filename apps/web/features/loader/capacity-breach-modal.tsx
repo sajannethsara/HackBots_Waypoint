@@ -1,18 +1,19 @@
 "use client"
 
 import { useState } from "react"
-import { Box, CircleAlert, Package, Weight } from "lucide-react"
-import type { LoaderCapacityBreach, LoaderStop } from "@waypoint/shared"
+import { Box, CircleAlert, Package, Send, Weight } from "lucide-react"
+import { toast } from "sonner"
+import type { CapacityResolution, LoaderCapacityBreach, LoaderStop } from "@waypoint/shared"
 import { TagBadge, TONE } from "@/components/shared/badges"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { fmtNum } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import { sentMessage, useReportIssue } from "./queries"
 
-type Resolution = "hold" | "discrepancy"
 
-const RESOLUTIONS: { id: Resolution; title: string; hint: string; tag: string }[] = [
+const RESOLUTIONS: { id: CapacityResolution; title: string; hint: string; tag: string }[] = [
   { id: "hold", title: "Hold this stop's items back", hint: "Leave the order off this vehicle and alert dispatch to re-plan it.", tag: "Recommended" },
   { id: "discrepancy", title: "Report a data discrepancy", hint: "The weights or volumes on record look wrong: ask dispatch to verify.", tag: "Verification" },
 ]
@@ -24,15 +25,35 @@ const RESOLUTIONS: { id: Resolution; title: string; hint: string; tag: string }[
 export function CapacityBreachModal({
   breach,
   stop,
+  tripId,
   vehicleId,
   onOpenChange,
 }: {
   breach: LoaderCapacityBreach | null
   stop: LoaderStop | null
+  tripId: string
   vehicleId: string
   onOpenChange: (open: boolean) => void
 }) {
-  const [resolution, setResolution] = useState<Resolution>("hold")
+  const [resolution, setResolution] = useState<CapacityResolution>("hold")
+  const [clientId, setClientId] = useState(() => crypto.randomUUID())
+  const report = useReportIssue(tripId)
+
+  const send = () =>
+    stop &&
+    report.mutate(
+      { clientId, kind: "capacity", tripId, stopId: stop.id, resolution },
+      {
+        onSuccess: (r) => {
+          toast.success(sentMessage(r), {
+            description: resolution === "hold" ? `${stop.order.ref} stays off ${vehicleId}; dispatch will re-plan it.` : "Dispatch will verify the recorded weights and volumes.",
+          })
+          setClientId(crypto.randomUUID())
+          onOpenChange(false)
+        },
+        onError: (err) => toast.error(err.message),
+      },
+    )
 
   return (
     <Dialog open={!!breach} onOpenChange={onOpenChange}>
@@ -77,7 +98,7 @@ export function CapacityBreachModal({
 
             <div className="grid gap-2">
               <p className="text-xs font-medium tracking-wider text-muted-foreground uppercase">Resolution (select one — loader override disabled)</p>
-              <RadioGroup value={resolution} onValueChange={(v) => setResolution(v as Resolution)} className="sm:grid-cols-2">
+              <RadioGroup value={resolution} onValueChange={(v) => setResolution(v as CapacityResolution)} className="sm:grid-cols-2">
                 {RESOLUTIONS.map((r) => (
                   <label
                     key={r.id}
@@ -102,9 +123,8 @@ export function CapacityBreachModal({
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Back to vehicle
               </Button>
-              {/* TODO: submit through the loader issue endpoint once reportIssue lands in loader.service.ts. */}
-              <Button disabled title="Reporting from this screen is coming soon">
-                Submit to dispatcher · coming soon
+              <Button onClick={send} disabled={!stop || report.isPending}>
+                <Send /> {report.isPending ? "Sending…" : "Submit to dispatcher"}
               </Button>
             </DialogFooter>
           </>

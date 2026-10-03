@@ -1,9 +1,21 @@
-import { BadRequestException, ConflictException, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, Post, Query } from "@nestjs/common"
+import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, Post, Query } from "@nestjs/common"
 import { Prisma } from "@waypoint/db"
-import { dateOnly, LOADER_QUEUE_FILTERS, type LoaderCapacityBreach, type LoaderQueueFilter, type LoaderTrip } from "@waypoint/shared"
+import {
+  dateOnly,
+  LOADER_QUEUE_FILTERS,
+  loaderIssueSchema,
+  minToHHMM,
+  type CreateIssueInput,
+  type LoaderCapacityBreach,
+  type LoaderIssueRequest,
+  type LoaderIssueResult,
+  type LoaderQueueFilter,
+  type LoaderTrip,
+} from "@waypoint/shared"
 import { CurrentUser, Roles, type SessionUser } from "../../common/auth"
 import { ClockService } from "../../common/clock.service"
 import { PrismaService } from "../../common/prisma.service"
+import { ZodPipe } from "../../common/zod.pipe"
 import { IssueChatModule, IssueChatService } from "../issue-chat/issue-chat.module"
 import { IssuesModule } from "../issues/issues.module"
 import { IssuesService } from "../issues/issues.service"
@@ -213,6 +225,82 @@ export class LoaderService {
     })
   }
 
+  /**
+   * A problem found at the loading bay, reported to dispatch. The description is written here from
+   * the trip's own data, never taken from the client. Missing and damaged items raise one issue per
+   * order line so each shortage can be acted on separately. Everything is checked before anything
+   * is written, and each issue's clientId derives from the request's, so a retry never duplicates.
+   */
+  async reportIssue(user: SessionUser, input: LoaderIssueRequest): Promise<LoaderIssueResult> {
+    if (!user.depotId) throw new ForbiddenException("You are not assigned to a depot")
+    const row = await this.db.trip.findFirst({ where: { id: input.tripId, plan: { depotId: user.depotId } }, include: queueInclude })
+    if (!row) throw new NotFoundException("Trip not found")
+    const trip = toLoaderTrip(row)
+    const stop = input.stopId ? trip.stops.find((s) => s.id === input.stopId) : undefined
+    if (input.stopId && !stop) throw new BadRequestException("That order is not on this trip")
+
+    const on = `${trip.vehicle.id}, ${trip.ref}`
+    const at = stop ? `${stop.order.ref} → ${stop.outlet.name}` : ""
+    const note = input.notes?.trim() ? ` Note: ${input.notes.trim()}` : ""
+    const base = { stage: "LOADING", tripId: trip.id, vehicleId: trip.vehicle.id, stopId: stop?.id, orderId: stop?.order.id, outletId: stop?.outlet.id } as const
+    const drafts: CreateIssueInput[] = []
+
+    if (input.kind === "missing" || input.kind === "damaged") {
+      for (const pick of input.lines) {
+        const line = stop!.order.lines.find((l) => l.id === pick.orderLineId)
+        if (!line) throw new BadRequestException(`That item is not on ${stop!.order.ref}`)
+        if (pick.units > line.quantity) throw new BadRequestException(`${line.description}: only ${line.quantity} units were ordered`)
+        drafts.push({
+          ...base,
+          clientId: `${input.clientId}:${line.id}`,
+          type: input.kind === "missing" ? "LOAD_MISSING" : "LOAD_DAMAGED",
+          severity: input.kind === "missing" ? "HIGH" : "MEDIUM",
+          orderLineId: line.id,
+          quantity: pick.units,
+          description: `${line.description}: ${pick.units} of ${line.quantity} units ${input.kind} for ${at} (${on}).${note}`,
+        })
+      }
+    } else if (input.kind === "sequence") {
+      const order = [...trip.stops].sort((a, b) => b.seq - a.seq)
+      const p = order.findIndex((s) => s.id === stop!.id) + 1
+      drafts.push({
+        ...base,
+        clientId: input.clientId,
+        type: "SEQUENCE_ISSUE",
+        severity: "MEDIUM",
+        description: `${at} is staged out of the loading sequence on ${on}: planned SEQ #${p} of ${order.length} (delivery stop ${stop!.seq}).${note}`,
+      })
+    } else if (input.kind === "delay") {
+      drafts.push({
+        ...base,
+        clientId: input.clientId,
+        type: "DEPARTURE_DELAY",
+        severity: input.delayMin! >= 30 ? "HIGH" : "MEDIUM",
+        description: `${on} expected to leave ${input.delayMin} min late (planned ${minToHHMM(trip.plannedDepartMin)}). Reason: ${input.delayReason ?? "not given"}.${note}`,
+      })
+    } else {
+      // Recompute the breach from the database rather than trusting the numbers on screen.
+      const stowed = trip.stops.filter((s) => s.id !== stop!.id && s.loadStatus === "STOWED")
+      const kg = round1(stowed.reduce((t, s) => t + s.order.weightKg, stop!.order.weightKg))
+      const m3 = round2(stowed.reduce((t, s) => t + s.order.volumeM3, stop!.order.volumeM3))
+      if (kg <= trip.vehicle.weightCapKg && m3 <= trip.vehicle.volumeCapM3) throw new BadRequestException(`${stop!.order.ref} fits on ${trip.vehicle.id}: nothing to report`)
+      drafts.push({
+        ...base,
+        clientId: input.clientId,
+        type: "CAPACITY_BREACH",
+        severity: "HIGH",
+        description:
+          `Loading ${at} would overload ${on}: ${kg} / ${trip.vehicle.weightCapKg} kg and ${m3} / ${trip.vehicle.volumeCapM3} m³. ` +
+          (input.resolution === "hold" ? "Loader is holding these items back." : "Loader reports a data discrepancy: the recorded weights or volumes look wrong.") +
+          note,
+      })
+    }
+
+    const issues = []
+    for (const d of drafts) issues.push(await this.issues.create(user, d))
+    return { issues: issues.map((i) => ({ id: i.id, ref: i.ref, type: i.type, description: i.description })) }
+  }
+
   /** One trip in the same shape as a queue row, so the client can swap it in place. */
   private async getTripDetail(tripId: string): Promise<LoaderTrip> {
     return toLoaderTrip(await this.db.trip.findUniqueOrThrow({ where: { id: tripId }, include: queueInclude }))
@@ -243,6 +331,11 @@ export class LoaderController {
   @Post("trips/:tripId/unclaim")
   unclaim(@CurrentUser() user: SessionUser, @Param("tripId") tripId: string) {
     return this.loader.unclaimTrip(user, tripId)
+  }
+
+  @Post("issues")
+  reportIssue(@CurrentUser() user: SessionUser, @Body(new ZodPipe(loaderIssueSchema)) body: LoaderIssueRequest) {
+    return this.loader.reportIssue(user, body)
   }
 
   @Post("stops/:stopId/confirm")

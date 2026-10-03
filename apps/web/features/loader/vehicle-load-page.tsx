@@ -63,7 +63,7 @@ function LoadList({ trip, state, depotName, onRefresh, refreshing }: { trip: Loa
   const claim = useClaimTrip()
   const [breach, setBreach] = useState<{ breach: LoaderCapacityBreach; stop: LoaderStop } | null>(null)
   const [inactive, setInactive] = useState<string | null>(null)
-  const [reporting, setReporting] = useState(false)
+  const [reporting, setReporting] = useState<{ stopId?: string } | null>(null)
   const pill = statusPill(trip, state)
   const load = stowedLoad(trip)
   const order = loadingOrder(trip.stops)
@@ -169,7 +169,7 @@ function LoadList({ trip, state, depotName, onRefresh, refreshing }: { trip: Loa
             <span className="text-xs text-muted-foreground">
               {trip.stops.length} {trip.stops.length === 1 ? "stop" : "stops"} · reverse delivery order
             </span>
-            <Button variant="outline" size="sm" onClick={() => setReporting(true)}>
+            <Button variant="outline" size="sm" onClick={() => setReporting({})}>
               <TriangleAlert /> Report an issue
             </Button>
           </div>
@@ -185,13 +185,14 @@ function LoadList({ trip, state, depotName, onRefresh, refreshing }: { trip: Loa
               canLoad={canLoad}
               pending={confirm.isPending && confirm.variables === s.id}
               onConfirm={() => onConfirm(s)}
+              onReport={() => setReporting({ stopId: s.id })}
             />
           ))}
         </ol>
       </Card>
 
-      <CapacityBreachModal breach={breach?.breach ?? null} stop={breach?.stop ?? null} vehicleId={trip.vehicle.id} onOpenChange={(o) => !o && setBreach(null)} />
-      <ReportIssueDialog trip={trip} open={reporting} onOpenChange={setReporting} />
+      <CapacityBreachModal breach={breach?.breach ?? null} stop={breach?.stop ?? null} tripId={trip.id} vehicleId={trip.vehicle.id} onOpenChange={(o) => !o && setBreach(null)} />
+      <ReportIssueDialog key={reporting?.stopId ?? "trip"} trip={trip} stopId={reporting?.stopId} open={!!reporting} onOpenChange={(o) => !o && setReporting(null)} />
     </div>
   )
 }
@@ -271,6 +272,7 @@ function StopRow({
   canLoad,
   pending,
   onConfirm,
+  onReport,
 }: {
   stop: LoaderStop
   position: number
@@ -279,50 +281,76 @@ function StopRow({
   canLoad: boolean
   pending: boolean
   onConfirm: () => void
+  onReport: () => void
 }) {
   const stowed = stop.loadStatus === "STOWED"
   const place = position === 1 ? "Bulkhead" : position === total ? "Tailgate" : position <= total / 2 ? "Front" : "Rear"
   return (
-    <li
-      className={cn(
-        "flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2.5",
-        active && "border-primary ring-1 ring-primary",
-        stowed && "bg-muted/40",
-      )}
-    >
-      <span className={cn("grid w-20 shrink-0 justify-items-center rounded-md px-2 py-1", active ? "bg-primary text-primary-foreground" : "bg-muted")}>
-        <span className="text-xs font-semibold">SEQ #{position}</span>
-        <span className={cn("text-[10px]", active ? "text-primary-foreground/80" : "text-muted-foreground")}>{place}</span>
-      </span>
-      <div className="w-28 shrink-0">
-        <p className="text-sm font-semibold">{stop.order.ref}</p>
-        <p className={cn("text-xs", active ? "font-medium text-primary" : "text-muted-foreground")}>{active ? "Load next" : `Delivery stop ${stop.seq}`}</p>
+    <li className={cn("overflow-hidden rounded-lg border", active && "border-primary ring-1 ring-primary", stowed && "bg-muted/40")}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2.5">
+        <span className={cn("grid w-20 shrink-0 justify-items-center rounded-md px-2 py-1", active ? "bg-primary text-primary-foreground" : "bg-muted")}>
+          <span className="text-xs font-semibold">SEQ #{position}</span>
+          <span className={cn("text-[10px]", active ? "text-primary-foreground/80" : "text-muted-foreground")}>{place}</span>
+        </span>
+        <div className="w-28 shrink-0">
+          <p className="text-sm font-semibold">{stop.order.ref}</p>
+          <p className={cn("text-xs", active ? "font-medium text-primary" : "text-muted-foreground")}>{active ? "Load next" : `Delivery stop ${stop.seq}`}</p>
+        </div>
+        <div className="min-w-40 flex-1">
+          <p className="truncate text-sm font-medium">{stop.outlet.name}</p>
+          <p className="flex items-center gap-1 text-xs text-muted-foreground">
+            {stop.order.temp === "CHILLED" && <Snowflake className="size-3 text-sky-600 dark:text-sky-400" />}
+            {stop.order.temp === "CHILLED" ? "Chilled" : "Ambient"} · window
+            <Clock className="ml-0.5 size-3" /> {formatWindow(stop.outlet.windowOpenMin, stop.outlet.windowCloseMin)}
+          </p>
+        </div>
+        <div className="w-36 text-right">
+          <p className="text-sm font-semibold tabular-nums">
+            {stop.order.units} units · {fmtNum(stop.order.weightKg)} kg
+          </p>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {fmtNum(stop.order.volumeM3, 2)} m³ · {stop.order.lines.length} {stop.order.lines.length === 1 ? "item" : "items"}
+          </p>
+        </div>
       </div>
-      <div className="min-w-40 flex-1">
-        <p className="truncate text-sm font-medium">{stop.outlet.name}</p>
-        <p className="flex items-center gap-1 text-xs text-muted-foreground">
-          {stop.order.temp === "CHILLED" && <Snowflake className="size-3 text-sky-600 dark:text-sky-400" />}
-          {stop.order.temp === "CHILLED" ? "Chilled" : "Ambient"} · {stop.order.lines.length} {stop.order.lines.length === 1 ? "line" : "lines"}
-        </p>
+
+      <table className="w-full border-t text-sm">
+        <thead className="bg-muted/50 text-[10px] tracking-wider text-muted-foreground uppercase">
+          <tr>
+            <th className="px-3 py-1.5 text-left font-medium">Item</th>
+            <th className="px-3 py-1.5 text-left font-medium">Category</th>
+            <th className="px-3 py-1.5 text-right font-medium">Quantity</th>
+            <th className="px-3 py-1.5 text-right font-medium">Weight</th>
+            <th className="hidden px-3 py-1.5 text-right font-medium sm:table-cell">Volume</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {stop.order.lines.map((l) => (
+            <tr key={l.id}>
+              <td className="px-3 py-1.5 font-medium">{l.description}</td>
+              <td className="px-3 py-1.5 text-muted-foreground">{l.category.charAt(0) + l.category.slice(1).toLowerCase()}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums">{l.quantity} units</td>
+              <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(l.weightKg, 1)} kg</td>
+              <td className="hidden px-3 py-1.5 text-right text-muted-foreground tabular-nums sm:table-cell">{fmtNum(l.volumeM3, 2)} m³</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t px-3 py-2">
+        <Button variant="ghost" size="sm" onClick={onReport}>
+          <TriangleAlert /> Report issue with {stop.order.ref}
+        </Button>
+        <label
+          className={cn(
+            "flex h-8 w-44 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium",
+            stowed ? cn("ring-1 ring-inset", TONE.green, "border-transparent") : canLoad ? "cursor-pointer hover:bg-muted" : "text-muted-foreground",
+          )}
+        >
+          <Checkbox checked={stowed} disabled={stowed || !canLoad || pending} onCheckedChange={(c) => c && onConfirm()} aria-label={`Confirm ${stop.order.ref} stowed`} />
+          {stowed ? "Confirmed loaded" : pending ? "Confirming…" : "Confirm stowed"}
+        </label>
       </div>
-      <span className="flex w-28 items-center gap-1 text-sm text-muted-foreground tabular-nums">
-        <Clock className="size-3.5" /> {formatWindow(stop.outlet.windowOpenMin, stop.outlet.windowCloseMin)}
-      </span>
-      <div className="w-32 text-right">
-        <p className="text-sm font-semibold tabular-nums">{fmtNum(stop.order.weightKg)} kg</p>
-        <p className="text-xs text-muted-foreground tabular-nums">
-          {fmtNum(stop.order.volumeM3, 1)} m³ · {stop.order.units} units
-        </p>
-      </div>
-      <label
-        className={cn(
-          "flex h-8 w-40 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium",
-          stowed ? cn("ring-1 ring-inset", TONE.green, "border-transparent") : canLoad ? "cursor-pointer hover:bg-muted" : "text-muted-foreground",
-        )}
-      >
-        <Checkbox checked={stowed} disabled={stowed || !canLoad || pending} onCheckedChange={(c) => c && onConfirm()} aria-label={`Confirm ${stop.order.ref} stowed`} />
-        {stowed ? "Confirmed loaded" : pending ? "Confirming…" : "Confirm stowed"}
-      </label>
     </li>
   )
 }

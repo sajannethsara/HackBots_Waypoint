@@ -1,7 +1,7 @@
 "use client"
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import type { LoaderCapacityBreach, LoaderQueueFilter, LoaderTrip } from "@waypoint/shared"
+import type { LoaderCapacityBreach, LoaderIssueInput, LoaderIssueResult, LoaderQueueFilter, LoaderTrip } from "@waypoint/shared"
 import { api, ApiError } from "@/lib/api"
 
 /** All loader data access in one place: query keys, fetchers and mutations. */
@@ -58,6 +58,22 @@ export function useConfirmStop(tripId: string) {
     onSettled: () =>
       Promise.all([qc.invalidateQueries({ queryKey: loaderKeys.trip(tripId) }), qc.invalidateQueries({ queryKey: ["loader", "queue"] })]),
   })
+}
+
+/** Report a loading problem; the trip and queue refresh so the vehicle shows as flagged. */
+export function useReportIssue(tripId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: LoaderIssueInput) => api<LoaderIssueResult>("/loader/issues", { method: "POST", json: input }),
+    onSuccess: () =>
+      Promise.all([qc.invalidateQueries({ queryKey: loaderKeys.trip(tripId) }), qc.invalidateQueries({ queryKey: ["loader", "queue"] })]),
+  })
+}
+
+/** "Sent ISS-0042 and ISS-0043 to dispatch" */
+export const sentMessage = (r: LoaderIssueResult) => {
+  const refs = r.issues.map((i) => i.ref)
+  return `Sent ${refs.length > 1 ? `${refs.slice(0, -1).join(", ")} and ${refs[refs.length - 1]}` : refs[0]} to dispatch`
 }
 
 /** What went wrong confirming a stop, told apart by the API's status and body. */
