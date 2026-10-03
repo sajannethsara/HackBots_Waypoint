@@ -206,6 +206,8 @@
   display: none;
   width: 0;
   height: 0;
+}
+
 /*
  * Store manager accessibility.
  * The brand green is a fill colour (buttons, chips), so as *text* it is too weak: 2.4:1 on the dark theme and
