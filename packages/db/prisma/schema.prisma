@@ -416,20 +416,21 @@ model RoadCondition {
 // ─────────────────────────────── Identity ───────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  phone        String?
-  passwordHash String
-  role         Role
-  depotId      String? // dispatcher / loader scope
-  depot        Depot?   @relation(fields: [depotId], references: [id])
-  outletId     String? // store manager scope
-  outlet       Outlet?  @relation(fields: [outletId], references: [id])
-  vehicleId    String?  @unique // driver's assigned vehicle
-  vehicle      Vehicle? @relation("DriverVehicle", fields: [vehicleId], references: [id])
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now()) @db.Timestamptz
+  id                String   @id @default(cuid())
+  email             String   @unique
+  name              String
+  phone             String?
+  passwordHash      String
+  role              Role
+  depotId           String? // dispatcher / loader scope
+  depot             Depot?   @relation(fields: [depotId], references: [id])
+  outletId          String? // store manager scope
+  outlet            Outlet?  @relation(fields: [outletId], references: [id])
+  vehicleId         String?  @unique // driver's assigned vehicle
+  vehicle           Vehicle? @relation("DriverVehicle", fields: [vehicleId], references: [id])
+  isActive          Boolean  @default(true)
+  notificationPrefs Json? // { orders, deliveries, issues, messages } booleans; missing means everything on
+  createdAt         DateTime @default(now()) @db.Timestamptz
 
   ordersCreated         Order[]               @relation("OrderCreatedBy")
   plansPublished        Plan[]                @relation("PlanPublishedBy")
