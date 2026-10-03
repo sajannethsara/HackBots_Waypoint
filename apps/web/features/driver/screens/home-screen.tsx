@@ -7,6 +7,7 @@ import { BrandBadge, TagBadge } from "@/components/shared/badges"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Progress } from "@/components/ui/progress"
+import { postClaim } from "../lib/driver-api"
 import { useDriver } from "../lib/driver-provider"
 import { distanceM, doneStops, fmtDistance, greeting, nextStop, tripOutcome, upcomingStops } from "../lib/model"
 import { Confirm, useNav } from "../nav"
@@ -15,11 +16,13 @@ import { cn } from "@/lib/utils"
 import { fmt, Mini, NavigateButton, SectionTitle, StopRow } from "../ui"
 
 export function HomeScreen() {
-  const { bundle, trip, nowMin, running, startTrip, completeTrip, gps, config } = useDriver()
+  const { bundle, trip, nowMin, running, startTrip, completeTrip, gps, config, refresh } = useDriver()
   const { openStop, openIssue } = useNav()
   const [confirmStart, setConfirmStart] = useState(false)
   const [confirmEnd, setConfirmEnd] = useState(false)
   const [manual, setManual] = useState(false)
+  const [claimBusy, setClaimBusy] = useState(false)
+  const [claimError, setClaimError] = useState<string | null>(null)
 
   const finishedToday = bundle.trips.filter((t) => t.status === "COMPLETED")
 
@@ -55,6 +58,19 @@ export function HomeScreen() {
   const atDepot = depotDist != null && depotDist <= departRadius
   const gpsBlocked = !config.demo && (gps.permission === "denied" || gps.permission === "unsupported" || (!gps.position && !!gps.lastError))
   const canClaim = atDepot || (gpsBlocked && manual)
+  // Depot gate: claim first, then dispatch (with the loader's claim) lets the trip out.
+  const setClaim = async (on: boolean) => {
+    setClaimBusy(true)
+    setClaimError(null)
+    try {
+      await postClaim(trip.id, on)
+      await refresh()
+    } catch (e) {
+      setClaimError(e instanceof Error ? e.message : "Could not reach dispatch. Try again.")
+    } finally {
+      setClaimBusy(false)
+    }
+  }
 
   return (
     <div className="grid gap-3 p-4">
@@ -128,12 +144,32 @@ export function HomeScreen() {
             </p>
           )}
 
+          <div className="grid gap-1.5 rounded-xl border px-3 py-2.5 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <p className={cn("font-medium", trip.claimedAt && "text-emerald-700 dark:text-emerald-300")}>
+                {trip.claimedAt ? (trip.released ? "Dispatch released the trip. You can start." : "Claimed. Waiting for dispatch to start the trip.") : "Claim this trip so dispatch knows you are ready."}
+              </p>
+              {trip.claimedAt ? (
+                !trip.released && (
+                  <Button variant="ghost" size="sm" disabled={claimBusy} onClick={() => setClaim(false)}>
+                    Undo
+                  </Button>
+                )
+              ) : (
+                <Button size="sm" disabled={!canClaim || claimBusy} onClick={() => setClaim(true)}>
+                  Claim
+                </Button>
+              )}
+            </div>
+            {claimError && <p className="text-xs text-destructive">{claimError}</p>}
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
             <NavigateButton depot className={cn(atDepot && "opacity-70")}>
               To the depot
             </NavigateButton>
-            <Button className="h-12 text-[15px]" disabled={!canClaim} onClick={() => setConfirmStart(true)}>
-              <Play data-icon="inline-start" /> Claim trip
+            <Button className="h-12 text-[15px]" disabled={!canClaim || !trip.released} onClick={() => setConfirmStart(true)}>
+              <Play data-icon="inline-start" /> Start trip
             </Button>
           </div>
 
@@ -190,7 +226,7 @@ export function HomeScreen() {
       <Confirm
         open={confirmStart}
         onOpenChange={setConfirmStart}
-        title={`Claim and start ${trip.ref}?`}
+        title={`Start ${trip.ref}?`}
         description={
           <>
             Dispatch will see you on the road.{" "}
@@ -199,7 +235,7 @@ export function HomeScreen() {
               : `Your location is shared every ${Math.round(config.pingSeconds / 60)} min while the trip runs. Keep this app open${gps.permission === "denied" ? " and allow location in your browser settings" : ""}.`}
           </>
         }
-        confirmLabel="Claim and start"
+        confirmLabel="Start trip"
         onConfirm={startTrip}
       />
       <Confirm

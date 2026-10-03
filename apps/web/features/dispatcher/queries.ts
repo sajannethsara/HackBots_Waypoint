@@ -2,12 +2,21 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import type { AssignOrderInput, CreateIssueInput, DeferOrderInput, GeneratePlanInput, ResolveIssueInput } from "@waypoint/shared"
+import type {
+  AssignOrderInput,
+  CreateIssueInput,
+  CreateTripInput,
+  DeferOrderInput,
+  GeneratePlanInput,
+  ResolveIssueInput,
+  SaveLayoutInput,
+} from "@waypoint/shared"
 import { useWorkspace } from "@/hooks/use-workspace"
 import { api, ApiError, qs, type Violation } from "@/lib/api"
 import type {
   Dashboard,
   DemandOverview,
+  ExceptionsOverview,
   IssueDetail,
   IssuesResponse,
   OrderDetail,
@@ -16,6 +25,7 @@ import type {
   OutletOverviewRow,
   Plan,
   TripDetail,
+  TripPreview,
   TripsResponse,
   Vehicle,
   VehicleDetail,
@@ -57,6 +67,8 @@ export function useCurrentPlan() {
     queryKey: keys.plan(depotId, date),
     queryFn: () => api<Plan | null>(`/plans/current${qs({ depotId, date })}`),
     enabled: ready,
+    // Once published the depot gate moves on its own (claims, auto-start), so keep it fresh.
+    refetchInterval: (q) => (q.state.data?.status === "PUBLISHED" ? 4_000 : false),
   })
 }
 
@@ -134,6 +146,65 @@ export function useAssignOrder(planId?: string) {
     onSuccess: (plan) => {
       sync(plan)
       toast.success("Order assigned", { description: "Trip re-sequenced and re-timed." })
+    },
+    onError,
+  })
+}
+
+/** Live re-timing of a trip in the canvas sequence. Keyed by the exact order list, so each edit recalculates. */
+export function useTripPreview(planId: string | undefined, tripId: string | undefined, orderIds: string[], enabled = true) {
+  return useQuery({
+    queryKey: ["trip-preview", planId, tripId, orderIds.join(",")],
+    queryFn: () => api<TripPreview>(`/plans/${planId}/trips/preview`, { method: "POST", json: { tripId, orderIds } }),
+    enabled: enabled && !!planId && !!tripId,
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+  })
+}
+
+export function useSaveLayout(planId?: string) {
+  const sync = usePlanCache()
+  return useMutation({
+    mutationFn: (input: SaveLayoutInput) => api<Plan>(`/plans/${planId}/layout`, { method: "PUT", json: input }),
+    onSuccess: (plan) => {
+      sync(plan)
+      toast.success("Trip saved", { description: "Order and arrival times updated on the draft." })
+    },
+    onError,
+  })
+}
+
+export function useCreateTrip(planId?: string) {
+  const sync = usePlanCache()
+  return useMutation({
+    mutationFn: (input: CreateTripInput) => api<Plan>(`/plans/${planId}/trips`, { method: "POST", json: input }),
+    onSuccess: (plan) => {
+      sync(plan)
+      toast.success("Trip created")
+    },
+    onError,
+  })
+}
+
+export function useRemoveTrip(planId?: string) {
+  const sync = usePlanCache()
+  return useMutation({
+    mutationFn: (tripId: string) => api<Plan>(`/plans/${planId}/trips/${tripId}`, { method: "DELETE" }),
+    onSuccess: (plan) => {
+      sync(plan)
+      toast.success("Trip removed", { description: "Its orders moved to the deferred pool." })
+    },
+    onError,
+  })
+}
+
+export function useResetTrip(planId?: string) {
+  const sync = usePlanCache()
+  return useMutation({
+    mutationFn: (tripId: string) => api<Plan>(`/plans/${planId}/trips/${tripId}/reset`, { method: "POST" }),
+    onSuccess: (plan) => {
+      sync(plan)
+      toast.success("Trip reset to the generated plan")
     },
     onError,
   })
@@ -277,4 +348,42 @@ export function useOutletDetail(id: string) {
 
 export function useOrderDetail(id: string) {
   return useQuery({ queryKey: ["order", id], queryFn: () => api<OrderDetail>(`/orders/${id}`) })
+}
+
+export function useDistricts() {
+  const { depotId, ready } = useWorkspace()
+  return useQuery({
+    queryKey: ["districts", depotId],
+    queryFn: () => api<{ id: string; depotToDistrictKm: number; depotToDistrictMin: number }[]>(`/districts${qs({ depotId })}`),
+    enabled: ready,
+    staleTime: 10 * 60_000,
+  })
+}
+
+/** Depot gate actions on a published trip. */
+function useGateAction(action: "start" | "hold" | "release", ok: string) {
+  const sync = usePlanCache()
+  return useMutation({
+    mutationFn: (tripId: string) => api<{ ok: true }>(`/gate/trips/${tripId}/${action}`, { method: "POST" }),
+    onSuccess: () => {
+      sync()
+      toast.success(ok)
+    },
+    onError,
+  })
+}
+
+export function useGate() {
+  return { start: useGateAction("start", "Trip is live"), hold: useGateAction("hold", "Trip held at the depot"), release: useGateAction("release", "Hold lifted") }
+}
+
+export function useExceptions() {
+  const { depotId, date, ready } = useWorkspace()
+  return useQuery({
+    queryKey: ["exceptions", depotId, date],
+    queryFn: () => api<ExceptionsOverview>(`/exceptions${qs({ depotId, date })}`),
+    enabled: ready,
+    refetchInterval: 20_000,
+    placeholderData: (prev) => prev,
+  })
 }

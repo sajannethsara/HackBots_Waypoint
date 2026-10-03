@@ -42,6 +42,8 @@ export interface SimTrip {
   stops: SimStop[]
   /** Road polylines per leg (depot → stop 1 … stop n → depot). Straight lines when absent. */
   legs?: LatLng[][]
+  /** Simulated minute the depot gate let the trip out; the replay never leaves earlier than this. */
+  launchMin?: number
 }
 
 type Segment =
@@ -103,7 +105,8 @@ export function buildTimeline(trip: SimTrip): Timeline {
   const r = rng(trip.id)
   const slip = Math.floor(r() * 9) // loading over-run
   const travelFactor = trip.roadFactor * (0.92 + r() * 0.16)
-  let t = trip.plannedDepartMin + slip
+  const leave = Math.max(trip.plannedDepartMin, trip.launchMin ?? 0)
+  let t = leave + slip
   let pos = trip.depot
   const segments: Segment[] = []
   const arrivals: number[] = []
@@ -125,7 +128,7 @@ export function buildTimeline(trip: SimTrip): Timeline {
   const back = t + trip.outboundMin * travelFactor
   const n = trip.stops.length
   segments.push({ kind: "travel", from: pos, to: trip.depot, t0: t, t1: back, stopIdx: n, pathIdx: n, geo: legGeo(trip.legs?.[n] ?? [pos, trip.depot]) })
-  return { depart: trip.plannedDepartMin + slip, segments, arrivals, completions, returnAt: back }
+  return { depart: leave + slip, segments, arrivals, completions, returnAt: back }
 }
 
 /** Compass bearing in degrees (0 = north, 90 = east). */

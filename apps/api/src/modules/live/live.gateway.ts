@@ -35,7 +35,7 @@ export class LiveGateway implements OnGatewayConnection, OnModuleInit, OnModuleD
 
   onModuleInit() {
     this.timer = setInterval(() => {
-      if (this.clock.now().running) void this.broadcast()
+      if (this.live.effectiveClock().running) void this.broadcast()
     }, TICK_MS)
   }
 

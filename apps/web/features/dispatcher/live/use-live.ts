@@ -82,7 +82,10 @@ export function useClockControl() {
     mutationFn: (body: { action: "play" | "pause" | "reset" | "seek" | "speed"; value?: number }) =>
       api<LiveClock>("/live/clock", { method: "POST", json: body }),
     // The server broadcasts a fresh snapshot to every open socket; refetch covers a closed one.
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["live"] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["live"] })
+      void qc.invalidateQueries({ queryKey: ["demo"] })
+    },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Could not change the clock"),
   })
 }

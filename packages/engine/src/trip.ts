@@ -73,15 +73,16 @@ export function schedule(
   districtId: string,
   orders: EngineOrder[],
   earliestDepart: number,
+  keepOrder = false,
 ): Schedule {
   const d = lk.district.get(districtId)!
-  const items = orders
-    .map((o) => {
-      const outlet = lk.outlet.get(o.outletId)!
-      const [open, close] = effectiveWindow(outlet)
-      return { o, outlet, open, close }
-    })
-    .sort((a, b) => a.close - b.close || a.open - b.open)
+  const items = orders.map((o) => {
+    const outlet = lk.outlet.get(o.outletId)!
+    const [open, close] = effectiveWindow(outlet)
+    return { o, outlet, open, close }
+  })
+  // keepOrder: a dispatcher's manual sequence is timed as given, not re-sorted.
+  if (!keepOrder) items.sort((a, b) => a.close - b.close || a.open - b.open)
 
   const firstOpen = items[0]?.open ?? earliestDepart
   const departMin = Math.max(earliestDepart, firstOpen - d.depotToDistrictMin)
