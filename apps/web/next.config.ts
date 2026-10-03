@@ -11,6 +11,9 @@ try {
 
 const nextConfig: NextConfig = {
   // Lets a production build live next to a running dev server (`NEXT_DIST_DIR=.next-prod next build`).
+  // Self-contained server bundle for the Docker image (see Dockerfile `web` stage).
+  output: "standalone",
+  outputFileTracingRoot: path.resolve(process.cwd(), "../.."),
   distDir: process.env.NEXT_DIST_DIR || ".next",
   // The dev badge sits on top of the driver app's bottom tab bar on phones.
   devIndicators: false,
