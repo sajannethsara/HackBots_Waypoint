@@ -7,9 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
-const TYPES: { value: StoreTemp; title: string; text: string; icon: typeof Package }[] = [
-  { value: "AMBIENT", title: "Ambient", text: "Dry goods and anything that travels at room temperature.", icon: Package },
-  { value: "CHILLED", title: "Chilled", text: "Dairy, meat and produce that need a refrigerated vehicle.", icon: Snowflake },
+const TYPES: { value: StoreTemp; title: string; text: string; icon: typeof Package; tone: string }[] = [
+  { value: "AMBIENT", title: "Ambient", text: "Dry goods and anything that travels at room temperature.", icon: Package, tone: "bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400" },
+  { value: "CHILLED", title: "Chilled", text: "Dairy, meat and produce that need a refrigerated vehicle.", icon: Snowflake, tone: "bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400" },
 ]
 
 /** Step 1: the brand is fixed to the outlet, the order type is the only choice (and only Fresh has one). */
@@ -46,7 +46,7 @@ export function StepType({ rules, value, onChange }: { rules?: StoreOrderRules; 
               >
                 <Card size="sm" className={cn("h-full transition-colors", selected ? "ring-2 ring-primary" : allowed && "hover:bg-muted/50")}>
                   <CardContent className="flex items-start gap-3">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                    <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", t.tone)}>
                       <t.icon className="size-4" />
                     </span>
                     <div className="min-w-0 flex-1">
