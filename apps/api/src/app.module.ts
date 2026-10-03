@@ -13,6 +13,7 @@ import { IssueChatModule } from "./modules/issue-chat/issue-chat.module"
 import { IssuesModule } from "./modules/issues/issues.module"
 import { MediaModule } from "./modules/media/media.module"
 import { LiveModule } from "./modules/live/live.module"
+import { LoaderModule } from "./modules/loader/loader.module"
 import { TripsModule } from "./modules/trips/trips.module"
 import { OutletsModule } from "./modules/outlets/outlets.module"
 import { VehiclesModule } from "./modules/vehicles/vehicles.module"
@@ -42,6 +43,7 @@ import { ReferenceModule } from "./modules/reference/reference.module"
     ChatModule,
     TripsModule,
     DriverModule,
+    LoaderModule,
     VehiclesModule,
     OutletsModule,
     StoreModule,

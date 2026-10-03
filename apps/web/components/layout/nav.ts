@@ -1,8 +1,10 @@
 import {
   AlertTriangle,
+  Archive,
   BarChart3,
   Building2,
   CircleAlert,
+  CircleCheck,
   ClipboardList,
   Gauge,
   LayoutDashboard,
@@ -22,10 +24,12 @@ export interface NavItem {
   title: string
   href: string
   icon: LucideIcon
-  badgeKey?: "exceptions" | "issues" | "inbox"
+  badgeKey?: "exceptions" | "issues" | "inbox" | "flagged"
   soon?: boolean
   /** Sub-links shown under the item (the parent link is also its first destination). */
   children?: { title: string; href: string }[]
+  /** Other path prefixes that belong to this item (it stays highlighted there). */
+  match?: string[]
 }
 export interface NavGroup {
   label: string
@@ -73,7 +77,18 @@ export const NAV: Record<Role, NavGroup[]> = {
       ],
     },
   ],
-  LOADER: [{ label: "Dock", items: [{ title: "Inbox", href: "/loader", icon: MessagesSquare, badgeKey: "inbox" }] }],
+  LOADER: [
+    {
+      label: "Loading",
+      items: [
+        { title: "Dashboard", href: "/loader/dashboard", icon: LayoutDashboard },
+        { title: "Loading Queue", href: "/loader/queue", icon: Archive, badgeKey: "flagged", match: ["/loader/vehicles", "/loader/issues"] },
+        { title: "My Loaded Vehicles", href: "/loader/loaded", icon: CircleCheck },
+      ],
+    },
+    { label: "Dock", items: [{ title: "Inbox", href: "/loader/inbox", icon: MessagesSquare, badgeKey: "inbox" }] },
+    { label: "Account", items: [{ title: "Settings", href: "/loader/settings", icon: Settings }] },
+  ],
   DRIVER: [{ label: "Road", items: [{ title: "Inbox", href: "/driver", icon: MessagesSquare, badgeKey: "inbox" }] }],
   STORE_MANAGER: [
     {

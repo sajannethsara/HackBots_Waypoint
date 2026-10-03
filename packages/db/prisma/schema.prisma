@@ -160,6 +160,8 @@ enum IssueType {
   LOAD_MISSING
   LOAD_DAMAGED
   CAPACITY_BREACH
+  SEQUENCE_ISSUE
+  DEPARTURE_DELAY
   LATE_ARRIVAL
   DELIVERY_REFUSED
   OUTLET_CLOSED
@@ -414,40 +416,39 @@ model RoadCondition {
 // ─────────────────────────────── Identity ───────────────────────────────
 
 model User {
-  id                String   @id @default(cuid())
-  email             String   @unique
-  name              String
-  phone             String?
-  passwordHash      String
-  role              Role
-  depotId           String? // dispatcher / loader scope
-  depot             Depot?   @relation(fields: [depotId], references: [id])
-  outletId          String? // store manager scope
-  outlet            Outlet?  @relation(fields: [outletId], references: [id])
-  vehicleId         String?  @unique // driver's assigned vehicle
-  vehicle           Vehicle? @relation("DriverVehicle", fields: [vehicleId], references: [id])
-  isActive          Boolean  @default(true)
-  notificationPrefs Json? // { orders, deliveries, issues, messages } booleans; missing means everything on
-  createdAt         DateTime @default(now()) @db.Timestamptz
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  phone        String?
+  passwordHash String
+  role         Role
+  depotId      String? // dispatcher / loader scope
+  depot        Depot?   @relation(fields: [depotId], references: [id])
+  outletId     String? // store manager scope
+  outlet       Outlet?  @relation(fields: [outletId], references: [id])
+  vehicleId    String?  @unique // driver's assigned vehicle
+  vehicle      Vehicle? @relation("DriverVehicle", fields: [vehicleId], references: [id])
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz
 
-  ordersCreated         Order[]               @relation("OrderCreatedBy")
-  plansPublished        Plan[]                @relation("PlanPublishedBy")
-  decisionsMade         PlanDecision[]        @relation("DecisionOverriddenBy")
-  tripsLoaded           Trip[]                @relation("TripLoadedBy")
-  tripsDriven           Trip[]                @relation("TripDriver")
-  deliveryEvents        DeliveryEvent[]
-  locations             DriverLocation[]
-  issueChatMembers      IssueChatMember[]
-  issueChatMessages     IssueChatMessage[]
-  issuesReported        Issue[]               @relation("IssueReportedBy")
-  issuesResolved        Issue[]               @relation("IssueResolvedBy")
-  receipts              Receipt[]
-  notifications         Notification[]
-  auditLogs             AuditLog[]
-  conversations         Conversation[]        @relation("ConversationMember")
-  messagesSent          Message[]             @relation("MessageSender")
-  changeRequestsMade    OutletChangeRequest[] @relation("ChangeRequestedBy")
-  changeRequestsDecided OutletChangeRequest[] @relation("ChangeDecidedBy")
+  ordersCreated     Order[]            @relation("OrderCreatedBy")
+  plansPublished    Plan[]             @relation("PlanPublishedBy")
+  decisionsMade     PlanDecision[]     @relation("DecisionOverriddenBy")
+  tripsLoaded       Trip[]             @relation("TripLoadedBy")
+  tripsClaimed      Trip[]             @relation("TripClaimedBy")
+  linesCounted      LoadLine[]         @relation("LoadLineCountedBy")
+  tripsDriven       Trip[]             @relation("TripDriver")
+  deliveryEvents    DeliveryEvent[]
+  locations         DriverLocation[]
+  issueChatMembers  IssueChatMember[]
+  issueChatMessages IssueChatMessage[]
+  issuesReported    Issue[]            @relation("IssueReportedBy")
+  issuesResolved    Issue[]            @relation("IssueResolvedBy")
+  receipts          Receipt[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  conversations     Conversation[]     @relation("ConversationMember")
+  messagesSent      Message[]          @relation("MessageSender")
 }
 
 // ──────────────────────────────── Orders ────────────────────────────────
@@ -485,6 +486,20 @@ model Order {
   @@index([outletId, deliveryDate])
 }
 
+// The loader's item checklist: units counted onto the truck per order line of a stop.
+// Missing = ordered - loaded - damaged. Keyed by stop, so a re-planned order starts a fresh count.
+model LoadLine {
+  stopId      String
+  stop        Stop      @relation(fields: [stopId], references: [id], onDelete: Cascade)
+  orderLineId String
+  orderLine   OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  loadedQty   Int // good units on the truck
+  damagedQty  Int       @default(0)
+  countedById String
+  countedBy   User      @relation("LoadLineCountedBy", fields: [countedById], references: [id])
+  countedAt   DateTime  @updatedAt @db.Timestamptz
+
+  @@id([stopId, orderLineId])
 // What a store can order. Unit weight/volume are calibrated to each brand's real average per unit.
 model Product {
   id           String          @id @default(cuid())
@@ -517,6 +532,7 @@ model OrderLine {
   deliveryLines DeliveryLine[]
   receiptLines  ReceiptLine[]
   issues        Issue[]
+  loadLines     LoadLine[]
 }
 
 // ─────────────────────────────── Planning ───────────────────────────────
@@ -585,6 +601,9 @@ model Trip {
   loadedAt           DateTime?         @db.Timestamptz
   loadedById         String?
   loadedBy           User?             @relation("TripLoadedBy", fields: [loadedById], references: [id])
+  claimedById        String?
+  claimedBy          User?             @relation("TripClaimedBy", fields: [claimedById], references: [id])
+  claimedAt          DateTime?         @db.Timestamptz
   driverId           String?
   /// Road geometry from Google Routes: { source, legs: [[lat,lng]...][], km, min, computedAt }
   route              Json?
@@ -624,6 +643,7 @@ model Stop {
   proof             ProofOfDelivery?
   events            DeliveryEvent[]
   issues            Issue[]
+  loadLines         LoadLine[]
 
   @@unique([tripId, seq])
   @@index([orderId])
