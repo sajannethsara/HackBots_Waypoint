@@ -90,6 +90,9 @@ const person = (u: Member): ChatPerson => ({
 
 const memberDepot = (u: Member) => u.depotId ?? u.outlet?.depotId ?? null
 
+/** True when there is a message newer than the side's last clear. */
+const visible = (lastMessageAt: Date | null, clearedAt: Date | null) => !!lastMessageAt && (!clearedAt || lastMessageAt > clearedAt)
+
 @Injectable()
 export class ChatService {
   constructor(
@@ -120,7 +123,7 @@ export class ChatService {
       ],
     }
     const rows = await this.db.conversation.findMany({ where, orderBy: { lastMessageAt: "desc" }, take: 100, include: summaryInclude })
-    return rows.map((r) => this.toSummary(user, r))
+    return rows.filter((r) => this.hasHistory(user, r)).map((r) => this.toSummary(user, r))
   }
 
   /** Total unread for the signed-in side: drives the sidebar badge. */
@@ -156,12 +159,12 @@ export class ChatService {
     })
     const threads = await this.db.conversation.findMany({
       where: { depotId, kind: "DIRECT", memberId: { in: users.map((u) => u.id) } },
-      select: { id: true, memberId: true, deskUnread: true, lastMessageAt: true },
+      select: { id: true, memberId: true, deskUnread: true, lastMessageAt: true, deskClearedAt: true },
     })
     const byMember = new Map(threads.map((t) => [t.memberId, t]))
     return users.map((u) => {
       const t = byMember.get(u.id)
-      return { ...person(u), conversationId: t?.lastMessageAt ? t.id : null, unread: t?.deskUnread ?? 0 }
+      return { ...person(u), conversationId: t && visible(t.lastMessageAt, t.deskClearedAt) ? t.id : null, unread: t?.deskUnread ?? 0 }
     })
   }
 
@@ -211,7 +214,7 @@ export class ChatService {
     const conv = await this.access(user, id)
     const take = Math.min(Math.max(q.limit ?? PAGE, 1), 100)
     const rows = await this.db.message.findMany({
-      where: { conversationId: id },
+      where: { conversationId: id, ...this.sinceCleared(user, conv) },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: take + 1,
       ...(q.before ? { cursor: { id: q.before }, skip: 1 } : {}),
@@ -278,6 +281,15 @@ export class ChatService {
     return { ok: true }
   }
 
+  /** Clear the conversation for the signed-in side only: the other side keeps its history. */
+  async clear(user: SessionUser, id: string) {
+    const conv = await this.access(user, id)
+    const field = user.role === "DISPATCHER" ? ("deskClearedAt" as const) : ("memberClearedAt" as const)
+    await this.db.conversation.update({ where: { id }, data: { [field]: new Date(), [this.unreadField(user)]: 0 } })
+    this.gateway.publishToSide(conv, user.role === "DISPATCHER" ? "desk" : "member", "cleared", { conversationId: id })
+    return { ok: true }
+  }
+
   /** Status updates posted into an issue's threads (acknowledged, resolved). Never fails the caller. */
   async postSystemForIssue(issueId: string, text: string) {
     try {
@@ -304,12 +316,12 @@ export class ChatService {
     const people = await this.participants(issue, depotId)
     const threads = await this.db.conversation.findMany({
       where: { issueId, memberId: { in: people.map((p) => p.id) } },
-      select: { memberId: true, id: true, deskUnread: true, lastMessageAt: true },
+      select: { memberId: true, id: true, deskUnread: true, lastMessageAt: true, deskClearedAt: true },
     })
     const byMember = new Map(threads.map((t) => [t.memberId, t]))
     return people.map((p) => {
       const t = byMember.get(p.id)
-      return { ...p, conversationId: t?.lastMessageAt ? t.id : null, unread: t?.deskUnread ?? 0 }
+      return { ...p, conversationId: t && visible(t.lastMessageAt, t.deskClearedAt) ? t.id : null, unread: t?.deskUnread ?? 0 }
     })
   }
 
@@ -520,6 +532,20 @@ export class ChatService {
     return { memberId: user.sub }
   }
 
+  private clearedAt(user: SessionUser, c: { deskClearedAt: Date | null; memberClearedAt: Date | null }) {
+    return user.role === "DISPATCHER" ? c.deskClearedAt : c.memberClearedAt
+  }
+
+  private sinceCleared(user: SessionUser, c: { deskClearedAt: Date | null; memberClearedAt: Date | null }): Prisma.MessageWhereInput {
+    const at = this.clearedAt(user, c)
+    return at ? { createdAt: { gt: at } } : {}
+  }
+
+  /** A thread shows up for a side only while it holds something newer than that side's clear. */
+  private hasHistory(user: SessionUser, c: ConversationRow) {
+    return visible(c.lastMessageAt, this.clearedAt(user, c))
+  }
+
   private unreadField(user: SessionUser) {
     return user.role === "DISPATCHER" ? ("deskUnread" as const) : ("memberUnread" as const)
   }
@@ -537,7 +563,9 @@ export class ChatService {
   }
 
   private toSummary(user: SessionUser, c: ConversationRow): ConversationSummary {
-    const last = c.messages[0]
+    const cleared = this.clearedAt(user, c)
+    const latest = c.messages[0]
+    const last = latest && (!cleared || latest.createdAt > cleared) ? latest : undefined
     return {
       id: c.id,
       kind: c.kind,

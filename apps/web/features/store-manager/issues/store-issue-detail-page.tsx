@@ -66,11 +66,15 @@ export function StoreIssueDetailPage({ id }: { id: string }) {
                 <Fact label="Item">{i.line ?? "Whole order"}</Fact>
                 <Fact label="Quantity">{i.quantity ?? "—"}</Fact>
               </dl>
-              {i.photoId && (
-                <a href={`/api/media/${i.photoId}`} target="_blank" rel="noreferrer" className="block w-fit" aria-label="Open the photo in a new tab">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`/api/media/${i.photoId}`} alt={`Photo attached to ${i.ref}`} className="max-h-72 rounded-lg border object-contain" />
-                </a>
+              {i.photoIds.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {i.photoIds.map((id, n) => (
+                    <a key={id} href={`/api/media/${id}`} target="_blank" rel="noreferrer" className="block" aria-label={`Open photo ${n + 1} in a new tab`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`/api/media/${id}`} alt={`Photo ${n + 1} attached to ${i.ref}`} className="aspect-square w-full rounded-lg border object-cover" />
+                    </a>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>

@@ -57,7 +57,6 @@ services:
       DEMO_PING_SECONDS: ${DEMO_PING_SECONDS:-10}
       GPS_PING_SECONDS: ${GPS_PING_SECONDS:-240}
       ARRIVE_RADIUS_M: ${ARRIVE_RADIUS_M:-150}
-    # Uploads are not persisted here on purpose: photos are moving into the database.
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/health || exit 1"]
       interval: 10s

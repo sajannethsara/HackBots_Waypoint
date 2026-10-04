@@ -38,14 +38,13 @@ RUN pnpm install --frozen-lockfile --prod --filter "@waypoint/api..." \
 
 # ── API runtime: also carries the prisma CLI + seed so one image can migrate, seed and serve ──
 FROM base AS api
-ENV NODE_ENV=production UPLOAD_DIR=/uploads DATA_DIR=/repo/data
+ENV NODE_ENV=production DATA_DIR=/repo/data
 COPY --from=api-deps /repo ./
 COPY --from=build /repo/packages/shared/dist packages/shared/dist
 COPY --from=build /repo/packages/engine/dist packages/engine/dist
 COPY --from=build /repo/packages/db/dist packages/db/dist
 COPY --from=build /repo/apps/api/dist apps/api/dist
 COPY data data
-RUN mkdir -p /uploads && chown node:node /uploads
 USER node
 EXPOSE 4000
 WORKDIR /repo/apps/api

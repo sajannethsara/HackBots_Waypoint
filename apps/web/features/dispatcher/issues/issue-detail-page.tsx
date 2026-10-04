@@ -12,6 +12,7 @@ import type { IssueDetail } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useIssue, useTripDetail } from "../queries"
 import { TripMap, plannedAsLive } from "../trips/detail/trip-map"
+import { CarryOverCard } from "./carry-over-card"
 import { AutoBadge, IssueStatusBadge, SeverityBadge, StageBadge } from "./issue-badges"
 import { IssueWorkspace } from "./issue-workspace"
 
@@ -123,7 +124,10 @@ export function IssueDetailPage({ id, mapboxToken }: { id: string; mapboxToken?:
           </Card>
         </div>
 
-        <IssueWorkspace issue={issue} />
+        <div className="grid h-fit gap-3 xl:sticky xl:top-18">
+          <IssueWorkspace issue={issue} />
+          <CarryOverCard issue={issue} />
+        </div>
       </div>
     </div>
   )

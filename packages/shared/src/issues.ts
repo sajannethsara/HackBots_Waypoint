@@ -46,6 +46,11 @@ const notifyDriver: IssuePlaybookAction = {
   hint: "Push the instruction to the driver's run sheet",
   effect: "NOTIFY_DRIVER",
 }
+const carryOver: IssuePlaybookAction = {
+  id: "carry-over",
+  label: "Carry over to the next run",
+  hint: "Units re-sent on a carry-over order for the outlet (Decisions → Carry over)",
+}
 
 export const ISSUE_TYPE_META: Record<IssueType, { label: string; playbook: IssuePlaybookAction[] }> = {
   LOAD_MISSING: {
@@ -53,6 +58,7 @@ export const ISSUE_TYPE_META: Record<IssueType, { label: string; playbook: Issue
     playbook: [
       { id: "repick", label: "Re-pick from stock before departure", hint: "Loader picks the missing lines again" },
       { id: "short-ship", label: "Ship short and credit the store", hint: "Deliver what is loaded; missing qty is credited" },
+      carryOver,
       notifyStore,
     ],
   },
@@ -61,6 +67,7 @@ export const ISSUE_TYPE_META: Record<IssueType, { label: string; playbook: Issue
     playbook: [
       { id: "replace", label: "Replace damaged items", hint: "Swap from stock before departure" },
       { id: "write-off", label: "Write off and credit", hint: "Record as damaged in warehouse" },
+      carryOver,
       notifyStore,
     ],
   },
@@ -140,6 +147,7 @@ export const ISSUE_TYPE_META: Record<IssueType, { label: string; playbook: Issue
     playbook: [
       { id: "check-pod", label: "Check proof of delivery", hint: "Compare against the driver's signed POD" },
       { id: "credit", label: "Credit the store", hint: "Issue a credit for missing quantity" },
+      carryOver,
       notifyStore,
     ],
   },
@@ -147,7 +155,7 @@ export const ISSUE_TYPE_META: Record<IssueType, { label: string; playbook: Issue
     label: "Damaged at receipt",
     playbook: [
       { id: "credit", label: "Credit the store", hint: "Issue a credit for damaged quantity" },
-      { id: "replace", label: "Replace on next run", hint: "Add replacement to the next order" },
+      carryOver,
       notifyStore,
     ],
   },
@@ -155,7 +163,7 @@ export const ISSUE_TYPE_META: Record<IssueType, { label: string; playbook: Issue
     label: "Wrong items received",
     playbook: [
       { id: "collect", label: "Collect wrong items next run", hint: "Driver collects on the next visit" },
-      { id: "replace", label: "Send correct items", hint: "Add to next run" },
+      carryOver,
       notifyStore,
     ],
   },

@@ -71,6 +71,10 @@ export function ChatProvider({ wsUrl, children }: { wsUrl?: string; children: Re
       refresh()
     })
     socket.on("read", refresh)
+    socket.on("cleared", (e: { conversationId: string }) => {
+      qc.removeQueries({ queryKey: chatKeys.thread(e.conversationId) })
+      refresh()
+    })
     socket.on("issue-chat:message", () => {
       qc.invalidateQueries({ queryKey: ["issue-chat"] })
       window.dispatchEvent(new Event("wp:issue-chat"))
@@ -156,6 +160,20 @@ export function useMarkRead() {
       qc.invalidateQueries({ queryKey: ["chat", "conversations"] })
       qc.invalidateQueries({ queryKey: ["chat", "participants"] })
     },
+  })
+}
+
+/** Clear a conversation for the signed-in side only; the other side keeps its history. */
+export function useClearConversation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api<{ ok: true }>(`/chat/conversations/${id}/clear`, { method: "POST" }),
+    onSuccess: (_, id) => {
+      qc.removeQueries({ queryKey: chatKeys.thread(id) })
+      qc.invalidateQueries({ queryKey: chatKeys.all })
+      toast.success("Chat cleared")
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Could not clear the chat"),
   })
 }
 
