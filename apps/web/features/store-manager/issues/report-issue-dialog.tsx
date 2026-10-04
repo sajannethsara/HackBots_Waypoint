@@ -1,10 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { CheckCircle2, CircleAlert, ImagePlus, Info, X } from "lucide-react"
 import { toast } from "sonner"
-import { ISSUE_TYPE_META, STORE_ISSUE_TYPES, type StoreIssueType, type StoreReceivingDetail } from "@waypoint/shared"
+import { ISSUE_TYPE_META, MAX_ISSUE_PHOTOS, STORE_ISSUE_TYPES, type StoreIssueType, type StoreReceivingDetail } from "@waypoint/shared"
 import { QuantityInput } from "@/components/shared/quantity-input"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -47,7 +47,9 @@ function ReportFlow({ order, onClose }: { order: IssueTarget; onClose: () => voi
   const [lineId, setLineId] = useState(WHOLE)
   const [qty, setQty] = useState(1)
   const [notes, setNotes] = useState("")
-  const [photo, setPhoto] = useState<File | null>(null)
+  const [photos, setPhotos] = useState<File[]>([])
+  const previews = useMemo(() => photos.map((f) => URL.createObjectURL(f)), [photos])
+  useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<{ id: string; ref: string } | null>(null)
@@ -85,14 +87,14 @@ function ReportFlow({ order, onClose }: { order: IssueTarget; onClose: () => voi
     setError(null)
     setBusy(true)
     try {
-      const photoId = photo ? await uploadIssuePhoto(photo) : undefined
+      const photoIds = photos.length ? await Promise.all(photos.map(uploadIssuePhoto)) : undefined
       const saved = await report.mutateAsync({
         clientId: crypto.randomUUID(),
         type,
         orderLineId: line?.orderLineId,
         quantity: needsQty ? q : undefined,
         description: notes.trim(),
-        photoId,
+        photoIds,
       })
       setDone(saved)
       toast.success(`Issue ${saved.ref} reported`)
@@ -170,21 +172,36 @@ function ReportFlow({ order, onClose }: { order: IssueTarget; onClose: () => voi
       </Field>
 
       <Field>
-        <FieldLabel>Photo (optional)</FieldLabel>
-        {photo ? (
-          <div className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
-            <ImagePlus className="size-4 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate">{photo.name}</span>
-            <Button variant="ghost" size="icon-sm" aria-label="Remove photo" onClick={() => setPhoto(null)}>
-              <X />
-            </Button>
-          </div>
-        ) : (
-          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground hover:bg-muted/50">
-            <ImagePlus className="size-4" /> Add a photo
-            <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} />
-          </label>
-        )}
+        <FieldLabel>
+          Photos (optional, up to {MAX_ISSUE_PHOTOS})
+        </FieldLabel>
+        <div className="grid grid-cols-3 gap-2">
+          {previews.map((src, i) => (
+            <div key={src} className="relative aspect-square overflow-hidden rounded-lg border">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={src} alt={`Photo ${i + 1}`} className="size-full object-cover" />
+              <Button variant="secondary" size="icon-xs" className="absolute right-1 top-1" aria-label={`Remove photo ${i + 1}`} disabled={busy} onClick={() => setPhotos((p) => p.filter((_, k) => k !== i))}>
+                <X />
+              </Button>
+            </div>
+          ))}
+          {photos.length < MAX_ISSUE_PHOTOS && (
+            <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed text-xs text-muted-foreground hover:bg-muted/50">
+              <ImagePlus className="size-4" /> Add
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="sr-only"
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files ?? [])
+                  setPhotos((p) => [...p, ...picked].slice(0, MAX_ISSUE_PHOTOS))
+                  e.target.value = ""
+                }}
+              />
+            </label>
+          )}
+        </div>
       </Field>
 
       <DialogFooter>

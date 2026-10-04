@@ -717,12 +717,24 @@ model MediaAsset {
   kind         MediaKind
   mimeType     String
   sizeBytes    Int
-  data         Bytes // compressed on device; small enough for Postgres. Empty when the file lives in `filePath`.
-  filePath     String? // relative to the uploads folder (see MediaStorage); set for store issue photos
+  data         Bytes // compressed on the device, stored directly in Postgres
   createdAt    DateTime         @default(now()) @db.Timestamptz
   podSignature ProofOfDelivery? @relation("PodSignature")
   podPhoto     ProofOfDelivery? @relation("PodPhoto")
   issues       Issue[]
+  issuePhoto   IssuePhoto?
+}
+
+// Extra photo evidence on an issue (up to 3). The bytes live in MediaAsset.data.
+model IssuePhoto {
+  id       String     @id @default(cuid())
+  issueId  String
+  issue    Issue      @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  mediaId  String     @unique
+  media    MediaAsset @relation(fields: [mediaId], references: [id])
+  position Int        @default(0)
+
+  @@index([issueId, position])
 }
 
 // ─────────────────────────── Receipt & issues ───────────────────────────
@@ -780,8 +792,9 @@ model Issue {
   vehicle          Vehicle?      @relation(fields: [vehicleId], references: [id])
   outletId         String?
   outlet           Outlet?       @relation(fields: [outletId], references: [id])
-  photoId          String?
+  photoId          String? // first photo, kept for older readers; every photo is listed in `photos`
   photo            MediaAsset?   @relation(fields: [photoId], references: [id])
+  photos           IssuePhoto[]
   reportedById     String
   reportedBy       User          @relation("IssueReportedBy", fields: [reportedById], references: [id])
   resolvedById     String?
