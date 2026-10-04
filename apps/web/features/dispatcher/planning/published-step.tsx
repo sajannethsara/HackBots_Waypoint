@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowUpRight, BellRing, Check, CirclePause, CirclePlay, Hand, LayoutDashboard, Radio, RefreshCw, Route, Timer, Truck, User, Warehouse } from "lucide-react"
+import { ArrowUpRight, BellRing, Check, CirclePause, CirclePlay, Hand, LayoutDashboard, Loader, PackageCheck, Radio, RefreshCw, Route, Timer, Truck, User, Warehouse } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { GATE_AUTO_START_MS } from "@waypoint/shared"
 import { BrandBadge, TagBadge } from "@/components/shared/badges"
@@ -109,7 +109,7 @@ export function PublishedStep({ plan, onReplan }: { plan: Plan; onReplan: () => 
                   <TableHead>District</TableHead>
                   <TableHead className="text-right">Depart</TableHead>
                   <TableHead>Claimed by driver</TableHead>
-                  <TableHead>Claimed by loader</TableHead>
+                  <TableHead>Loader</TableHead>
                   <TableHead className="pr-4 text-right">Gate</TableHead>
                 </TableRow>
               </TableHeader>
@@ -148,6 +148,38 @@ function Claim({ name, at, icon: Icon, empty }: { name: string | null; at: strin
   )
 }
 
+/**
+ * What the loader is doing with this trip, from the loader app (loading → loaded) or the depot gate (claimed).
+ * Loading shows stops stowed so far; flagged stops (missing or damaged goods) are called out.
+ */
+function LoaderCell({ trip: t }: { trip: Trip }) {
+  const name = t.loadedBy?.name ?? t.claimedBy?.name ?? t.loader?.name ?? null
+  const total = t.stops.length
+  const stowed = t.stops.filter((s) => s.loadStatus === "STOWED").length
+  const flagged = t.stops.filter((s) => s.loadStatus === "FLAGGED").length
+  const loaded = t.status === "LOADED" || ((t.status === "DEPARTED" || t.status === "COMPLETED") && !!t.loadedAt)
+
+  if (loaded)
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-600/15 ring-inset dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20" title={`${stowed} of ${total} stops stowed`}>
+        <PackageCheck className="size-3" /> Loaded{name ? ` · ${name}` : ""}
+        {t.loadedAt && <span className="font-normal opacity-70">{fmtTime(t.loadedAt)}</span>}
+        {flagged > 0 && <span className="font-normal text-amber-700 dark:text-amber-300">· {flagged} flagged</span>}
+      </span>
+    )
+  if (t.status === "LOADING")
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-md bg-sky-50 px-2 py-1 text-xs font-medium text-sky-700 ring-1 ring-sky-600/15 ring-inset dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-400/20" title={t.claimedAt ? `Started ${fmtTime(t.claimedAt)}` : undefined}>
+        <Loader className="size-3 animate-spin [animation-duration:2.5s]" /> Loading{name ? ` · ${name}` : ""}
+        <span className="font-normal tabular-nums opacity-80">
+          {stowed}/{total} stowed
+        </span>
+        {flagged > 0 && <span className="font-normal text-amber-700 dark:text-amber-300">· {flagged} flagged</span>}
+      </span>
+    )
+  return <Claim name={t.loader?.name ?? null} at={t.loaderClaimedAt} icon={Hand} empty="Waiting for loader" />
+}
+
 function GateRow({ trip: t }: { trip: Trip }) {
   const router = useRouter()
   const gate = useGate()
@@ -177,7 +209,7 @@ function GateRow({ trip: t }: { trip: Trip }) {
         <Claim name={t.driver?.name ?? t.vehicle.driver?.name ?? null} at={t.driverClaimedAt} icon={User} empty="No driver assigned" />
       </TableCell>
       <TableCell>
-        <Claim name={t.loader?.name ?? null} at={t.loaderClaimedAt} icon={Hand} empty="Waiting for loader" />
+        <LoaderCell trip={t} />
       </TableCell>
       <TableCell className="pr-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-end gap-1.5">

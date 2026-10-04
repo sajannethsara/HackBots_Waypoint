@@ -83,6 +83,8 @@ export class GateService implements OnModuleInit, OnModuleDestroy {
   async claim(user: SessionUser, tripId: string, on: boolean) {
     const trip = await this.openTrip(tripId)
     if (trip.liveAt) throw new ConflictException("This trip is already live")
+    // Once loading has started the claim belongs to the load list: give the trip back there, not at the gate.
+    if (user.role === "LOADER" && !on && trip.status !== "PLANNED") throw new ConflictException("Loading has started: hand the trip back from the vehicle's load list")
     const data =
       user.role === "DRIVER"
         ? trip.driverId === user.sub || (user.vehicleId && trip.vehicleId === user.vehicleId)
