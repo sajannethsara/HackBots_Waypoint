@@ -310,8 +310,8 @@ function LoadList({
           <AlertDescription>
             <p>
               This trip belongs to plan version {trip.plan.version}, which is no
-              longer current, so nothing more can be loaded on it here. Check the
-              queue for this vehicle&apos;s trip in the new plan, and tell
+              longer current, so nothing more can be loaded on it here. Check
+              the queue for this vehicle&apos;s trip in the new plan, and tell
               dispatch about anything already on the truck.
             </p>
             <Button
@@ -404,7 +404,7 @@ function LoadList({
           <h2 className="text-xs font-semibold tracking-wider uppercase">
             Loading sequence (bulkhead to tailgate)
           </h2>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="text-xs text-muted-foreground">
               {trip.stops.length} {trip.stops.length === 1 ? "stop" : "stops"} ·
               reverse delivery order
@@ -418,7 +418,8 @@ function LoadList({
             </Button>
           </div>
         </div>
-        <ol className="grid gap-2 p-3">
+        {/* Long loading sequences scroll inside the card so the header and the finish bar stay in view on tablets. */}
+        <ol className="grid max-h-[65dvh] gap-2 overflow-y-auto overscroll-contain p-3 [-webkit-overflow-scrolling:touch] md:max-h-[calc(100dvh-16rem)]">
           {order.map((s, i) => (
             <StopRow
               key={s.id}
@@ -494,7 +495,9 @@ function LoadList({
                 "Finishing…"
               ) : (
                 <>
-                  <span className="@md/finish:hidden">Finish &amp; release</span>
+                  <span className="@md/finish:hidden">
+                    Finish &amp; release
+                  </span>
                   <span className="hidden @md/finish:inline">
                     Finish loading &amp; release
                   </span>
@@ -766,7 +769,7 @@ function StopRow({
             )}
           </p>
         </div>
-        <div className="w-36 text-right">
+        <div className="w-full @2xl/stop:w-36 @2xl/stop:text-right">
           <p className="text-sm font-semibold tabular-nums">
             {stop.order.units} units · {fmtNum(stop.order.weightKg)} kg
           </p>
@@ -800,61 +803,63 @@ function StopRow({
       )}
 
       {/* Wide stop cards get a table; narrow ones (phones, portrait tablets) get stacked rows with full-width controls. */}
-      <table className="hidden w-full border-t text-sm @2xl/stop:table">
-        <thead className="bg-muted/50 text-[10px] tracking-wider text-muted-foreground uppercase">
-          <tr>
-            <th className="px-3 py-1.5 text-left font-medium">Item</th>
-            <th className="px-3 py-1.5 text-left font-medium">Category</th>
-            <th className="px-3 py-1.5 text-right font-medium">Quantity</th>
-            <th className="px-3 py-1.5 text-right font-medium">Weight</th>
-            <th className="hidden px-3 py-1.5 text-right font-medium @4xl/stop:table-cell">
-              Volume
-            </th>
-            <th className="px-3 py-1.5 text-right font-medium">Loaded?</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {stop.order.lines.map((l) => {
-            const item = lineState(l, issues, stowed)
-            return (
-              <tr
-                key={l.id}
-                className={cn(
-                  item.done && "bg-emerald-50/40 dark:bg-emerald-500/5"
-                )}
-              >
-                <td className="px-3 py-1.5">
-                  <p className="font-medium">{l.description}</p>
-                  <LineBadges line={l} item={item} tripId={tripId} />
-                </td>
-                <td className="px-3 py-1.5 text-muted-foreground">
-                  {categoryLabel(l.category)}
-                </td>
-                <td className="px-3 py-1.5 text-right tabular-nums">
-                  {l.quantity} units
-                </td>
-                <td className="px-3 py-1.5 text-right tabular-nums">
-                  {fmtNum(l.weightKg, 1)} kg
-                </td>
-                <td className="hidden px-3 py-1.5 text-right text-muted-foreground tabular-nums @4xl/stop:table-cell">
-                  {fmtNum(l.volumeM3, 2)} m³
-                </td>
-                <td className="px-3 py-1.5">
-                  <LineControls
-                    line={l}
-                    item={item}
-                    canLoad={canLoad}
-                    saving={markingLine === l.id}
-                    onMark={onMarkLine}
-                    onReport={onReportLine}
-                    className="justify-end"
-                  />
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+      <div className="hidden overflow-x-auto border-t @2xl/stop:block">
+        <table className="w-full min-w-[34rem] text-sm">
+          <thead className="bg-muted/50 text-[10px] tracking-wider text-muted-foreground uppercase">
+            <tr>
+              <th className="px-3 py-1.5 text-left font-medium">Item</th>
+              <th className="px-3 py-1.5 text-left font-medium">Category</th>
+              <th className="px-3 py-1.5 text-right font-medium">Quantity</th>
+              <th className="px-3 py-1.5 text-right font-medium">Weight</th>
+              <th className="hidden px-3 py-1.5 text-right font-medium @4xl/stop:table-cell">
+                Volume
+              </th>
+              <th className="px-3 py-1.5 text-right font-medium">Loaded?</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {stop.order.lines.map((l) => {
+              const item = lineState(l, issues, stowed)
+              return (
+                <tr
+                  key={l.id}
+                  className={cn(
+                    item.done && "bg-emerald-50/40 dark:bg-emerald-500/5"
+                  )}
+                >
+                  <td className="px-3 py-1.5">
+                    <p className="font-medium">{l.description}</p>
+                    <LineBadges line={l} item={item} tripId={tripId} />
+                  </td>
+                  <td className="px-3 py-1.5 text-muted-foreground">
+                    {categoryLabel(l.category)}
+                  </td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">
+                    {l.quantity} units
+                  </td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">
+                    {fmtNum(l.weightKg, 1)} kg
+                  </td>
+                  <td className="hidden px-3 py-1.5 text-right text-muted-foreground tabular-nums @4xl/stop:table-cell">
+                    {fmtNum(l.volumeM3, 2)} m³
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <LineControls
+                      line={l}
+                      item={item}
+                      canLoad={canLoad}
+                      saving={markingLine === l.id}
+                      onMark={onMarkLine}
+                      onReport={onReportLine}
+                      className="justify-end"
+                    />
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
       <ul className="divide-y border-t @2xl/stop:hidden">
         {stop.order.lines.map((l) => {
           const item = lineState(l, issues, stowed)
@@ -888,7 +893,7 @@ function StopRow({
         })}
       </ul>
 
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t px-3 py-2">
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t px-3 py-2 @max-md/stop:[&>*]:flex-1">
         <Button
           variant="link"
           size="sm"
@@ -896,15 +901,14 @@ function StopRow({
           nativeButton={false}
           render={<Link href={`/loader/vehicles/${tripId}/stops/${stop.id}`} />}
         >
-          <ListChecks />{" "}
-          {canLoad && !stowed ? "Count units (optional)" : "View counts"}
+          <ListChecks /> {canLoad && !stowed ? "Count units" : "View counts"}
         </Button>
         <Button variant="ghost" size="sm" onClick={onReport}>
-          <TriangleAlert /> Report issue with {stop.order.ref}
+          <TriangleAlert /> Report issue
         </Button>
         <label
           className={cn(
-            "flex h-8 w-44 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium pointer-coarse:h-11",
+            "flex h-8 w-36 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium whitespace-nowrap pointer-coarse:h-11",
             stowed
               ? cn("ring-1 ring-inset", TONE.green, "border-transparent")
               : canLoad
@@ -918,11 +922,7 @@ function StopRow({
             onCheckedChange={(c) => c && onConfirm()}
             aria-label={`Confirm ${stop.order.ref} stowed`}
           />
-          {stowed
-            ? "Confirmed loaded"
-            : pending
-              ? "Confirming…"
-              : "Confirm whole order"}
+          {stowed ? "Confirmed" : pending ? "Confirming…" : "Confirm"}
         </label>
       </div>
     </li>
@@ -1039,8 +1039,8 @@ function LineControls({
           : item.done
             ? "Loaded"
             : canLoad
-              ? "Mark loaded"
-              : "Not loaded"}
+              ? "Load"
+              : "Pending"}
       </label>
     </div>
   )

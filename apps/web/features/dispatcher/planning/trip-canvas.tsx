@@ -336,6 +336,11 @@ export function StopRowView({
               ↻{order.deferCount}
             </span>
           )}
+          {order.carriedFromOrderId && (
+            <span className="text-sky-600 dark:text-sky-400" title="Carry-over: re-sends missing or damaged units">
+              Carry-over
+            </span>
+          )}
         </span>
       </div>
       <div className="text-right text-xs tabular-nums">

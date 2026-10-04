@@ -56,6 +56,7 @@ const planInclude = {
               weightKg: true,
               volumeM3: true,
               deferCount: true,
+              carriedFromOrderId: true,
               outlet: { select: { id: true, name: true, districtId: true, dockType: true, parkingConstraint: true, windowOpenMin: true, windowCloseMin: true, mallWindowOpenMin: true, mallWindowCloseMin: true, lat: true, lng: true } },
             },
           },

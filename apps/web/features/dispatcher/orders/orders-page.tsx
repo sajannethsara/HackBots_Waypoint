@@ -194,6 +194,11 @@ function OrdersTable({ rows, onOpen }: { rows: OrderRow[]; onOpen: (id: string) 
                     ↻{o.deferCount}
                   </TagBadge>
                 )}
+                {o.carriedFromOrderId && (
+                  <TagBadge tone="blue" title="Re-sends missing or damaged units of an earlier order">
+                    Carry-over
+                  </TagBadge>
+                )}
               </div>
             </TableCell>
             <TableCell>
