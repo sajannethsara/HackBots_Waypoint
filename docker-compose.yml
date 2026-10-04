@@ -37,6 +37,9 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-waypoint}:${POSTGRES_PASSWORD:-waypoint}@db:5432/${POSTGRES_DB:-waypoint}?schema=public
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+      GEMINI_FALLBACK_MODEL: ${GEMINI_FALLBACK_MODEL:-}
       DEMO_MODE: ${DEMO_MODE:-false}
       DEMO_PING_SECONDS: ${DEMO_PING_SECONDS:-10}
       GPS_PING_SECONDS: ${GPS_PING_SECONDS:-240}

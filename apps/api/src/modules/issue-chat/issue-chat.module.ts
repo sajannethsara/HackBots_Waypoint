@@ -222,6 +222,29 @@ export class IssueChatService {
       this.db.issueChatMember.updateMany({ where: { chatId, userId: { not: user.sub } }, data: { unread: { increment: 1 } } }),
       this.db.issueChatMember.updateMany({ where: { chatId, userId: user.sub }, data: { unread: 0 } }),
     ])
+    const out = this.publish(chat, message)
+    if (user.role !== "DISPATCHER") for (const fn of this.memberListeners) fn({ issueId: chat.issue.id, senderName: user.name, body: message.body })
+    return out
+  }
+
+  private readonly memberListeners: ((e: { issueId: string; senderName: string; body: string }) => void)[] = []
+
+  /** Called after a loader, driver or store manager posts (the issue agent wakes on replies). */
+  onMemberMessage(fn: (e: { issueId: string; senderName: string; body: string }) => void) {
+    this.memberListeners.push(fn)
+  }
+
+  /** A message from a platform account (the issue agent), opening the chat first if needed. */
+  async postAs(senderId: string, issueId: string, body: string): Promise<IssueChatMessageDto> {
+    const chatId = await this.ensure(issueId)
+    if (!chatId) throw new NotFoundException("This issue has no chat (it is not linked to a depot)")
+    const chat = await this.db.issueChat.findUniqueOrThrow({ where: { id: chatId }, select: { id: true, depotId: true, closedAt: true } })
+    if (chat.closedAt) throw new ConflictException("The issue chat is closed")
+    const [message] = await this.db.$transaction([
+      this.db.issueChatMessage.create({ data: { chatId, senderId, body }, include: { sender: senderSelect } }),
+      this.db.issueChat.update({ where: { id: chatId }, data: { lastMessageAt: new Date() } }),
+      this.db.issueChatMember.updateMany({ where: { chatId }, data: { unread: { increment: 1 } } }),
+    ])
     return this.publish(chat, message)
   }
 

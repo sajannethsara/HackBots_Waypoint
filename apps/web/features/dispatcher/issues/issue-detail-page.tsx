@@ -127,7 +127,8 @@ export function IssueDetailPage({ id, mapboxToken }: { id: string; mapboxToken?:
           </Card>
         </div>
 
-        <div className="grid h-fit gap-3 xl:sticky xl:top-18">
+        <div className="grid h-fit gap-3 xl:sticky xl:top-18 xl:max-h-[calc(100dvh-5.5rem)] xl:overflow-y-auto">
+          {/* Pinned beside the issue: never taller than the screen (the carry-over card below can still be reached). */}
           <IssueWorkspace issue={issue} />
           <CarryOverCard issue={issue} />
         </div>

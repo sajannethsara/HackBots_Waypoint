@@ -55,5 +55,5 @@ export class IssuesController {
   }
 }
 
-@Module({ imports: [ChatModule, IssueChatModule], controllers: [IssuesController, IssueActionsController], providers: [IssuesService, IssueActionsService], exports: [IssuesService] })
+@Module({ imports: [ChatModule, IssueChatModule], controllers: [IssuesController, IssueActionsController], providers: [IssuesService, IssueActionsService], exports: [IssuesService, IssueActionsService] })
 export class IssuesModule {}

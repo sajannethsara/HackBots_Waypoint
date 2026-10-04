@@ -79,6 +79,12 @@ export function ChatProvider({ wsUrl, children }: { wsUrl?: string; children: Re
       qc.invalidateQueries({ queryKey: ["issue-chat"] })
       window.dispatchEvent(new Event("wp:issue-chat"))
     })
+    // The issue agent changed state (working, waiting, plan ready); steps it ran may have changed the issue too.
+    socket.on("agent:update", (e: { issueId: string }) => {
+      qc.invalidateQueries({ queryKey: ["issue-agent", e.issueId] })
+      qc.invalidateQueries({ queryKey: ["issue"] })
+      qc.invalidateQueries({ queryKey: ["issue-actions", e.issueId] })
+    })
     return () => {
       socket.disconnect()
     }
