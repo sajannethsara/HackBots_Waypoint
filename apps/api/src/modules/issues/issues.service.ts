@@ -117,6 +117,20 @@ export class IssuesService {
         stop: { select: { seq: true, plannedArrivalMin: true, status: true } },
         order: { select: { id: true, ref: true, temp: true, units: true, weightKg: true, volumeM3: true, lines: true } },
         orderLine: true,
+        carryOverOrder: {
+          select: {
+            id: true,
+            ref: true,
+            status: true,
+            deliveryDate: true,
+            units: true,
+            weightKg: true,
+            lines: { select: { id: true, description: true, quantity: true } },
+            carryOverIssues: { select: { id: true, ref: true } },
+            // Newest plan first: the trip that will carry it, once planned.
+            stops: { orderBy: { trip: { plan: { version: "desc" } } }, take: 1, select: { seq: true, trip: { select: { id: true, ref: true, plan: { select: { status: true } } } } } },
+          },
+        },
         outlet: { select: { id: true, name: true, districtId: true, windowOpenMin: true, windowCloseMin: true, managers: { select: { name: true, phone: true } } } },
         vehicle: { select: { id: true, type: true, temp: true, status: true } },
       },

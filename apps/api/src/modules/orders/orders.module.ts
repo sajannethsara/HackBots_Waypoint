@@ -6,6 +6,18 @@ import { PrismaService } from "../../common/prisma.service"
 
 export type OrderView = "all" | "unassigned" | "assigned" | "deferred"
 
+/** One carried-over item: the issue, its units, the order they came from and the order re-sending them. */
+const carriedItemSelect = {
+  id: true,
+  ref: true,
+  type: true,
+  status: true,
+  quantity: true,
+  orderLine: { select: { description: true } },
+  order: { select: { id: true, ref: true } },
+  carryOverOrder: { select: { id: true, ref: true, status: true, deliveryDate: true } },
+} satisfies Prisma.IssueSelect
+
 @Injectable()
 export class OrdersService {
   constructor(private readonly db: PrismaService) {}
@@ -77,6 +89,9 @@ export class OrdersService {
         depot: { select: { id: true, name: true } },
         lines: true,
         createdBy: { select: { name: true } },
+        carriedFrom: { select: { id: true, ref: true } },
+        // On a carry-over order: the issues whose units it re-sends.
+        carryOverIssues: { orderBy: { createdAt: "asc" }, select: carriedItemSelect },
         decisions: { orderBy: { createdAt: "desc" }, include: { plan: { select: { version: true, status: true, date: true } }, overriddenBy: { select: { name: true } } } },
         stops: {
           orderBy: { trip: { plan: { version: "desc" } } },
@@ -90,13 +105,21 @@ export class OrdersService {
       },
     })
     if (!order) throw new NotFoundException("Order not found")
-    const audit = await this.db.auditLog.findMany({
-      where: { OR: [{ entityType: "Order", entityId: id }, { entityType: "Issue", entityId: { in: order.issues.map((i) => i.id) } }] },
-      orderBy: { createdAt: "desc" },
-      take: 40,
-      include: { actor: { select: { name: true } } },
-    })
-    return { ...order, audit: audit.map((a) => ({ id: a.id, action: a.action, at: a.createdAt, actor: a.actor?.name ?? "System", entityType: a.entityType, after: a.after })) }
+    const [audit, carriedOut] = await Promise.all([
+      this.db.auditLog.findMany({
+        where: { OR: [{ entityType: "Order", entityId: id }, { entityType: "Issue", entityId: { in: order.issues.map((i) => i.id) } }] },
+        orderBy: { createdAt: "desc" },
+        take: 40,
+        include: { actor: { select: { name: true } } },
+      }),
+      // Units of this order that went missing or were damaged and are re-sent on a later carry-over order.
+      this.db.issue.findMany({ where: { orderId: id, carryOverOrderId: { not: null } }, orderBy: { createdAt: "asc" }, select: carriedItemSelect }),
+    ])
+    return {
+      ...order,
+      carriedOut,
+      audit: audit.map((a) => ({ id: a.id, action: a.action, at: a.createdAt, actor: a.actor?.name ?? "System", entityType: a.entityType, after: a.after })),
+    }
   }
 }
 

@@ -458,33 +458,38 @@ model User {
 // ──────────────────────────────── Orders ────────────────────────────────
 
 model Order {
-  id              String          @id @default(cuid())
-  ref             String          @unique // "ORD-000123"
-  clientRequestId String?         @unique // idempotent submit
-  outletId        String
-  outlet          Outlet          @relation(fields: [outletId], references: [id])
-  brand           Brand // denormalised from outlet for planning queries
-  depotId         String
-  depot           Depot           @relation(fields: [depotId], references: [id])
-  deliveryDate    DateTime        @db.Date // current target run
-  requestedDate   DateTime        @db.Date // date the store asked for (Task 2A rule)
-  temp            TempRequirement
-  units           Int
-  weightKg        Float
-  volumeM3        Float
-  status          OrderStatus     @default(SUBMITTED)
-  deferCount      Int             @default(0)
-  notes           String?
-  windowPref      String? // store's preferred receiving slot, "HH:MM-HH:MM"; a preference, not a planner constraint
-  submittedAt     DateTime        @default(now()) @db.Timestamptz
-  updatedAt       DateTime        @updatedAt @db.Timestamptz
-  createdById     String
-  createdBy       User            @relation("OrderCreatedBy", fields: [createdById], references: [id])
-  lines           OrderLine[]
-  decisions       PlanDecision[]
-  stops           Stop[]
-  receipt         Receipt?
-  issues          Issue[]
+  id                 String          @id @default(cuid())
+  ref                String          @unique // "ORD-000123"
+  clientRequestId    String?         @unique // idempotent submit
+  outletId           String
+  outlet             Outlet          @relation(fields: [outletId], references: [id])
+  brand              Brand // denormalised from outlet for planning queries
+  depotId            String
+  depot              Depot           @relation(fields: [depotId], references: [id])
+  deliveryDate       DateTime        @db.Date // current target run
+  requestedDate      DateTime        @db.Date // date the store asked for (Task 2A rule)
+  temp               TempRequirement
+  units              Int
+  weightKg           Float
+  volumeM3           Float
+  status             OrderStatus     @default(SUBMITTED)
+  deferCount         Int             @default(0)
+  notes              String?
+  windowPref         String? // store's preferred receiving slot, "HH:MM-HH:MM"; a preference, not a planner constraint
+  submittedAt        DateTime        @default(now()) @db.Timestamptz
+  updatedAt          DateTime        @updatedAt @db.Timestamptz
+  createdById        String
+  createdBy          User            @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  lines              OrderLine[]
+  decisions          PlanDecision[]
+  stops              Stop[]
+  receipt            Receipt?
+  issues             Issue[]         @relation("IssueOrder")
+  // Carry-over: dispatch re-sends missing/damaged items of an earlier order to the same outlet.
+  carriedFromOrderId String?
+  carriedFrom        Order?          @relation("OrderCarryOver", fields: [carriedFromOrderId], references: [id])
+  carryOvers         Order[]         @relation("OrderCarryOver")
+  carryOverIssues    Issue[]         @relation("IssueCarryOver")
 
   @@index([depotId, deliveryDate, status])
   @@index([outletId, deliveryDate])
@@ -751,38 +756,41 @@ model ReceiptLine {
 
 // Single exception table for every role and stage
 model Issue {
-  id           String        @id @default(cuid())
-  ref          String        @unique // "ISS-0042"
-  clientId     String?       @unique // offline-created issues
-  stage        IssueStage
-  type         IssueType
-  severity     IssueSeverity @default(MEDIUM)
-  status       IssueStatus   @default(OPEN)
-  description  String
-  quantity     Int?
-  orderId      String?
-  order        Order?        @relation(fields: [orderId], references: [id])
-  orderLineId  String?
-  orderLine    OrderLine?    @relation(fields: [orderLineId], references: [id])
-  tripId       String?
-  trip         Trip?         @relation(fields: [tripId], references: [id])
-  stopId       String?
-  stop         Stop?         @relation(fields: [stopId], references: [id])
-  vehicleId    String?
-  vehicle      Vehicle?      @relation(fields: [vehicleId], references: [id])
-  outletId     String?
-  outlet       Outlet?       @relation(fields: [outletId], references: [id])
-  photoId      String?
-  photo        MediaAsset?   @relation(fields: [photoId], references: [id])
-  reportedById String
-  reportedBy   User          @relation("IssueReportedBy", fields: [reportedById], references: [id])
-  resolvedById String?
-  resolvedBy   User?         @relation("IssueResolvedBy", fields: [resolvedById], references: [id])
-  resolution   String?
-  createdAt    DateTime      @default(now()) @db.Timestamptz
-  updatedAt    DateTime      @updatedAt @db.Timestamptz
-  resolvedAt   DateTime?     @db.Timestamptz
-  chat         IssueChat?
+  id               String        @id @default(cuid())
+  ref              String        @unique // "ISS-0042"
+  clientId         String?       @unique // offline-created issues
+  stage            IssueStage
+  type             IssueType
+  severity         IssueSeverity @default(MEDIUM)
+  status           IssueStatus   @default(OPEN)
+  description      String
+  quantity         Int?
+  orderId          String?
+  order            Order?        @relation("IssueOrder", fields: [orderId], references: [id])
+  orderLineId      String?
+  orderLine        OrderLine?    @relation(fields: [orderLineId], references: [id])
+  tripId           String?
+  trip             Trip?         @relation(fields: [tripId], references: [id])
+  stopId           String?
+  stop             Stop?         @relation(fields: [stopId], references: [id])
+  // The carry-over order this issue's items were re-sent on (set once; makes the action idempotent).
+  carryOverOrderId String?
+  carryOverOrder   Order?        @relation("IssueCarryOver", fields: [carryOverOrderId], references: [id])
+  vehicleId        String?
+  vehicle          Vehicle?      @relation(fields: [vehicleId], references: [id])
+  outletId         String?
+  outlet           Outlet?       @relation(fields: [outletId], references: [id])
+  photoId          String?
+  photo            MediaAsset?   @relation(fields: [photoId], references: [id])
+  reportedById     String
+  reportedBy       User          @relation("IssueReportedBy", fields: [reportedById], references: [id])
+  resolvedById     String?
+  resolvedBy       User?         @relation("IssueResolvedBy", fields: [resolvedById], references: [id])
+  resolution       String?
+  createdAt        DateTime      @default(now()) @db.Timestamptz
+  updatedAt        DateTime      @updatedAt @db.Timestamptz
+  resolvedAt       DateTime?     @db.Timestamptz
+  chat             IssueChat?
 
   conversations Conversation[]
 
@@ -882,22 +890,22 @@ model AppSetting {
 // The desk side is shared by all dispatchers of the depot, so unread state is per side.
 
 model Conversation {
-  id            String           @id @default(cuid())
-  key           String           @unique // "<memberId>:direct" | "<memberId>:<issueId>"
-  kind          ConversationKind
-  depotId       String
-  depot         Depot            @relation(fields: [depotId], references: [id])
-  memberId      String
-  member        User             @relation("ConversationMember", fields: [memberId], references: [id], onDelete: Cascade)
-  issueId       String?
-  issue         Issue?           @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  lastMessageAt DateTime?        @db.Timestamptz
-  deskUnread    Int              @default(0)
-  memberUnread  Int              @default(0)
-  deskClearedAt   DateTime?      @db.Timestamptz // the desk side hides everything up to here
-  memberClearedAt DateTime?      @db.Timestamptz // the member side hides everything up to here
-  createdAt     DateTime         @default(now()) @db.Timestamptz
-  messages      Message[]
+  id              String           @id @default(cuid())
+  key             String           @unique // "<memberId>:direct" | "<memberId>:<issueId>"
+  kind            ConversationKind
+  depotId         String
+  depot           Depot            @relation(fields: [depotId], references: [id])
+  memberId        String
+  member          User             @relation("ConversationMember", fields: [memberId], references: [id], onDelete: Cascade)
+  issueId         String?
+  issue           Issue?           @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  lastMessageAt   DateTime?        @db.Timestamptz
+  deskUnread      Int              @default(0)
+  memberUnread    Int              @default(0)
+  deskClearedAt   DateTime?        @db.Timestamptz // the desk side hides everything up to here
+  memberClearedAt DateTime?        @db.Timestamptz // the member side hides everything up to here
+  createdAt       DateTime         @default(now()) @db.Timestamptz
+  messages        Message[]
 
   @@index([depotId, lastMessageAt])
   @@index([memberId, lastMessageAt])

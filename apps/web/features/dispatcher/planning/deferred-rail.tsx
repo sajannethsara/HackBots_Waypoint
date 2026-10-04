@@ -27,6 +27,7 @@ export function DeferredCardView({ item, fits, overlay }: { item: PoolItem; fits
         <TempIcon temp={o.temp} />
         <span className="font-medium">{o.ref}</span>
         {o.deferCount > 0 && <TagBadge tone="red">↻{o.deferCount}</TagBadge>}
+        {o.carriedFromOrderId && <TagBadge tone="blue">Carry-over</TagBadge>}
         <span className="ml-auto">
           <BrandBadge brand={o.brand} />
         </span>

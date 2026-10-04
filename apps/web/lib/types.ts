@@ -108,6 +108,7 @@ export interface Stop {
     weightKg: number
     volumeM3: number
     deferCount: number
+    carriedFromOrderId: string | null
     outlet: OutletLite
   }
 }
@@ -167,6 +168,7 @@ export interface Decision {
     weightKg: number
     volumeM3: number
     deferCount: number
+    carriedFromOrderId: string | null
     outletId: string
     requestedDate: string
     outlet: OutletLite
@@ -235,6 +237,7 @@ export interface OrderRow {
   weightKg: number
   volumeM3: number
   deferCount: number
+  carriedFromOrderId: string | null
   status: string
   requestedDate: string
   deliveryDate: string
@@ -359,6 +362,17 @@ export interface IssueDetail extends Omit<IssueRow, "trip" | "stop" | "order" | 
   stop: { seq: number; plannedArrivalMin: number; status: string } | null
   order: { id: string; ref: string; temp: "CHILLED" | "AMBIENT"; units: number; weightKg: number; volumeM3: number; lines: OrderLine[] } | null
   orderLine: OrderLine | null
+  carryOverOrder: {
+    id: string
+    ref: string
+    status: string
+    deliveryDate: string
+    units: number
+    weightKg: number
+    lines: { id: string; description: string; quantity: number }[]
+    carryOverIssues: { id: string; ref: string }[]
+    stops: { seq: number; trip: { id: string; ref: string; plan: { status: string } } }[]
+  } | null
   outlet: { id: string; name: string; districtId: string; windowOpenMin: number; windowCloseMin: number; managers: { name: string; phone: string | null }[] } | null
   vehicle: { id: string; type: string; temp: string; status: string } | null
   history: { id: string; action: string; createdAt: string; actor: { name: string } | null; after: Record<string, unknown> | null }[]
@@ -441,6 +455,18 @@ export interface TripDetail {
 }
 
 // ── Resource detail pages (vehicles, outlets, orders) ──
+
+/** Missing/damaged units of one issue, re-sent to the outlet on a carry-over order. */
+export interface CarriedItem {
+  id: string
+  ref: string
+  type: IssueType
+  status: IssueStatus
+  quantity: number | null
+  orderLine: { description: string } | null
+  order: { id: string; ref: string } | null
+  carryOverOrder: { id: string; ref: string; status: string; deliveryDate: string } | null
+}
 
 export interface IssueChip {
   id: string
@@ -555,6 +581,12 @@ export interface OrderDetail {
   submittedAt: string
   notes: string | null
   createdBy: { name: string }
+  /** Set on a carry-over order: the order whose missing/damaged units it re-sends. */
+  carriedFrom: { id: string; ref: string } | null
+  /** On a carry-over order: the items it re-sends. Optional so an older API cannot crash the page. */
+  carryOverIssues?: CarriedItem[]
+  /** On an original order: its items re-sent on a later carry-over order. */
+  carriedOut?: CarriedItem[]
   depot: { id: string; name: string }
   outlet: OutletLite & {
     brand: Brand

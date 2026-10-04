@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { Boxes, ClipboardCheck, FileCheck2, PackageX, Repeat, Route, Scale, Store, Target, Truck, Workflow } from "lucide-react"
-import { DEFERRAL_REASON_META, DOCK_LABEL, PARKING_LABEL } from "@waypoint/shared"
+import { ArrowRight, Boxes, ClipboardCheck, FileCheck2, PackagePlus, PackageX, Repeat, Route, Scale, Store, Target, Truck, Workflow } from "lucide-react"
+import { DEFERRAL_REASON_META, DOCK_LABEL, ISSUE_TYPE_META, PARKING_LABEL } from "@waypoint/shared"
 import { BrandBadge, ReasonBadge, StatusBadge, TagBadge, TempIcon } from "@/components/shared/badges"
 import { StatCard } from "@/components/shared/stat-card"
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useWorkspace } from "@/hooks/use-workspace"
+import type { CarriedItem } from "@/lib/types"
 import { fmtDate, fmtDateTime, fmtNum, minToHHMM, timeAgo } from "@/lib/format"
 import { useLiveSnapshot } from "../live/use-live"
 import { useOrderDetail } from "../queries"
@@ -28,6 +29,45 @@ const AUDIT_LABEL: Record<string, string> = {
   ISSUE_RESOLVED: "Issue resolved",
 }
 const humanize = (a: string) => AUDIT_LABEL[a] ?? a.charAt(0) + a.slice(1).toLowerCase().replace(/_/g, " ")
+
+/** Each carried-over item with its issue, and where it came "from" or is going "to". */
+function CarriedItemList({ items, show }: { items: CarriedItem[]; show: "from" | "to" }) {
+  if (!items.length) return null
+  return (
+    <ul className="grid gap-1.5">
+      {items.map((i) => (
+        <li key={i.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border bg-background/60 px-2.5 py-1.5 text-xs">
+          <span className="font-medium">
+            {i.quantity ?? "?"} × {i.orderLine?.description ?? "item"}
+          </span>
+          <Link href={`/dispatcher/issues/${i.id}`} className="text-muted-foreground hover:underline">
+            {i.ref} · {ISSUE_TYPE_META[i.type].label.toLowerCase()}
+          </Link>
+          <span className="ml-auto flex items-center gap-1.5">
+            {show === "from" && i.order && (
+              <>
+                from
+                <Link href={`/dispatcher/orders/${i.order.id}`} className="font-medium hover:underline">
+                  {i.order.ref}
+                </Link>
+              </>
+            )}
+            {show === "to" && i.carryOverOrder && (
+              <>
+                <ArrowRight className="size-3 text-muted-foreground" />
+                <Link href={`/dispatcher/orders/${i.carryOverOrder.id}`} className="font-medium hover:underline">
+                  {i.carryOverOrder.ref}
+                </Link>
+                <span className="text-muted-foreground">{fmtDate(i.carryOverOrder.deliveryDate, { weekday: "short", day: "numeric", month: "short" })}</span>
+                <StatusBadge status={i.carryOverOrder.status} />
+              </>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 export function OrderDetailPage({ id, wsUrl }: { id: string; wsUrl?: string }) {
   const { data: o, isLoading, isError } = useOrderDetail(id)
@@ -75,6 +115,7 @@ export function OrderDetailPage({ id, wsUrl }: { id: string; wsUrl?: string }) {
               <TempIcon temp={o.temp} className="size-3" /> {o.temp === "CHILLED" ? "Chilled" : "Ambient"}
             </TagBadge>
             {o.deferCount > 0 && <TagBadge tone="amber">Deferred {o.deferCount}× before</TagBadge>}
+            {o.carriedFrom && <TagBadge tone="blue">Carry-over</TagBadge>}
           </div>
           <p className="text-sm text-muted-foreground">
             For{" "}
@@ -149,6 +190,53 @@ export function OrderDetailPage({ id, wsUrl }: { id: string; wsUrl?: string }) {
             </Button>
             {manager && <MessageButton memberId={manager.id} label="Message store" />}
           </div>
+        </section>
+      )}
+
+      {o.carriedFrom && (
+        <section className="grid gap-3 rounded-xl border border-sky-600/25 bg-sky-500/[0.06] p-4 dark:border-sky-400/25 dark:bg-sky-400/[0.07]">
+          <div className="flex flex-wrap items-center gap-2">
+            <PackagePlus className="size-4 text-sky-600 dark:text-sky-400" />
+            <h2 className="text-sm font-semibold">This is a carry-over order</h2>
+            <TagBadge tone="blue">Owed to the store</TagBadge>
+            <span className="ml-auto text-[11px] text-muted-foreground">
+              Created by {o.createdBy.name} · {timeAgo(o.submittedAt)}
+            </span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="grid gap-2 text-sm">
+              <p>
+                Re-sends units that went missing or were damaged on earlier orders for {o.outlet.name}. Dispatch created it from the issues below; planning
+                treats it like any other order, ranked like a deferred one so the store is not kept waiting.
+              </p>
+              <CarriedItemList items={o.carryOverIssues ?? []} show="from" />
+            </div>
+            <dl className="grid grid-cols-3 gap-x-5 gap-y-2 md:grid-cols-1">
+              <Fact label="Runs on" value={fmtDate(o.deliveryDate, { weekday: "short", day: "numeric", month: "short" })} />
+              <Fact label="First carried from" value={<Link href={`/dispatcher/orders/${o.carriedFrom.id}`} className="hover:underline">{o.carriedFrom.ref}</Link>} />
+              <Fact label="Planning" value={stop ? `On ${stop.trip.ref}` : "Waiting for a plan"} />
+            </dl>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" nativeButton={false} render={<Link href="/dispatcher/planning" />}>
+              <Workflow data-icon="inline-start" /> Open planning
+            </Button>
+            {manager && <MessageButton memberId={manager.id} label="Message store" />}
+          </div>
+        </section>
+      )}
+
+      {!!o.carriedOut?.length && (
+        <section className="grid gap-3 rounded-xl border border-sky-600/25 bg-sky-500/[0.06] p-4 dark:border-sky-400/25 dark:bg-sky-400/[0.07]">
+          <div className="flex flex-wrap items-center gap-2">
+            <PackagePlus className="size-4 text-sky-600 dark:text-sky-400" />
+            <h2 className="text-sm font-semibold">Items carried over to a later run</h2>
+            <TagBadge tone="blue">
+              {o.carriedOut.length} item{o.carriedOut.length === 1 ? "" : "s"}
+            </TagBadge>
+          </div>
+          <p className="text-sm">These units did not reach {o.outlet.name} with this order. Dispatch is re-sending them on a carry-over order for the outlet.</p>
+          <CarriedItemList items={o.carriedOut} show="to" />
         </section>
       )}
 
