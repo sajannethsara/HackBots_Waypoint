@@ -304,13 +304,16 @@ export interface StoreReceiptResult {
 export const STORE_ISSUE_TYPES = ["RECEIPT_MISSING", "RECEIPT_DAMAGED", "RECEIPT_WRONG_ITEMS", "OTHER"] as const
 export type StoreIssueType = (typeof STORE_ISSUE_TYPES)[number]
 
+/** Most photos a store manager can attach to one issue. */
+export const MAX_ISSUE_PHOTOS = 3
+
 export const reportStoreIssueSchema = z.object({
   clientId: z.string().min(8).max(64).optional(),
   type: z.enum(STORE_ISSUE_TYPES),
   orderLineId: z.string().optional(),
   quantity: z.number().int().positive().max(100_000).optional(),
   description: z.string().trim().min(3).max(500),
-  photoId: z.string().min(8).optional(),
+  photoIds: z.array(z.string().min(8)).max(MAX_ISSUE_PHOTOS).optional(),
 })
 export type ReportStoreIssueInput = z.infer<typeof reportStoreIssueSchema>
 
@@ -334,8 +337,8 @@ export interface StoreIssueDetail extends StoreIssueRow {
   resolvedAt: string | null
   resolvedBy: string | null
   reportedBy: string
-  /** Id of the attached photo; the image itself is served at /api/media/<id>. */
-  photoId: string | null
+  /** Ids of the attached photos, in order; each image is served at /api/media/<id>. */
+  photoIds: string[]
   timeline: { id: string; action: string; at: string; actor: string }[]
 }
 
