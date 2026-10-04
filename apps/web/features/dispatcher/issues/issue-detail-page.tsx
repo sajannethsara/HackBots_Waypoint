@@ -14,6 +14,7 @@ import { useIssue, useTripDetail } from "../queries"
 import { TripMap, plannedAsLive } from "../trips/detail/trip-map"
 import { CarryOverCard } from "./carry-over-card"
 import { AutoBadge, IssueStatusBadge, SeverityBadge, StageBadge } from "./issue-badges"
+import { IssuePhotos } from "./issue-photos"
 import { IssueWorkspace } from "./issue-workspace"
 
 const HISTORY_LABEL: Record<string, string> = {
@@ -70,6 +71,8 @@ export function IssueDetailPage({ id, mapboxToken }: { id: string; mapboxToken?:
               </dl>
             </CardContent>
           </Card>
+
+          <IssuePhotos issue={issue} />
 
           {issue.trip && <IssueRouteMap tripId={issue.trip.id} stopId={issue.stopId ?? undefined} mapboxToken={mapboxToken} />}
 
