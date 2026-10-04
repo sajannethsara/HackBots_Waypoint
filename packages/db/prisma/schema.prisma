@@ -894,6 +894,8 @@ model Conversation {
   lastMessageAt DateTime?        @db.Timestamptz
   deskUnread    Int              @default(0)
   memberUnread  Int              @default(0)
+  deskClearedAt   DateTime?      @db.Timestamptz // the desk side hides everything up to here
+  memberClearedAt DateTime?      @db.Timestamptz // the member side hides everything up to here
   createdAt     DateTime         @default(now()) @db.Timestamptz
   messages      Message[]
 

@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, ExternalLink, Headset, MessageSquareText, Phone, RotateCcw, Trash2 } from "lucide-react"
 import { ISSUE_TYPE_META, type ChatMessage, type IssueSeverity, type IssueStatus, type IssueType, type Role } from "@waypoint/shared"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useMe } from "@/hooks/use-session"
@@ -12,7 +13,7 @@ import { cn } from "@/lib/utils"
 import { IssueStatusBadge, SeverityBadge } from "../dispatcher/issues/issue-badges"
 import { clock, counterpart, dayLabel, MessageBody, PersonAvatar, RoleTag } from "./chat-parts"
 import { Composer } from "./composer"
-import { useMarkRead, useOlderMessages, useSendMessage, useThread, type PendingMessage } from "./use-chat"
+import { useClearConversation, useMarkRead, useOlderMessages, useSendMessage, useThread, type PendingMessage } from "./use-chat"
 
 const GROUP_GAP_MS = 5 * 60_000
 
@@ -37,6 +38,8 @@ export function ChatThread({
   const send = useSendMessage(conversationId)
   const markRead = useMarkRead()
   const older = useOlderMessages()
+  const clear = useClearConversation()
+  const [confirmClear, setConfirmClear] = useState(false)
   const [earlier, setEarlier] = useState<ChatMessage[]>([])
   const [hasMoreEarlier, setHasMoreEarlier] = useState<boolean | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
@@ -133,11 +136,46 @@ export function ChatThread({
                 <Phone />
               </Button>
             )}
+            <Button variant="outline" size="icon-sm" disabled={!messages.length || clear.isPending} onClick={() => setConfirmClear(true)} aria-label="Clear chat" title="Clear chat">
+              <Trash2 />
+            </Button>
           </>
         ) : (
           <Skeleton className="h-9 w-48" />
         )}
       </header>
+
+      <Dialog open={confirmClear} onOpenChange={setConfirmClear}>
+        <DialogContent className="gap-3 sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Clear this chat?</DialogTitle>
+            <DialogDescription>
+              This removes the messages from your side only. {other ? (me?.role === "DISPATCHER" ? `${other.name} keeps their copy.` : "The dispatch desk keeps its copy.") : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmClear(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={clear.isPending}
+              onClick={() =>
+                clear.mutate(conversationId, {
+                  onSuccess: () => {
+                    setConfirmClear(false)
+                    setEarlier([])
+                    setHasMoreEarlier(null)
+                    onBack?.()
+                  },
+                })
+              }
+            >
+              Clear chat
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {conv?.issue && (
         <div className="flex flex-wrap items-center gap-2 border-b bg-muted/40 px-3 py-2 text-xs">
