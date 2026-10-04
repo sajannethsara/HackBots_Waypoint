@@ -75,7 +75,7 @@ export class OutletsService {
 
     const [orders, totals, byStatus, issues, openIssues] = await Promise.all([
       this.db.order.findMany({
-        where: { outletId: id },
+        where: { outletId: id, status: { not: "DRAFT" } },
         orderBy: [{ deliveryDate: "desc" }, { ref: "desc" }],
         take: HISTORY_LIMIT,
         select: {
@@ -98,8 +98,8 @@ export class OutletsService {
           },
         },
       }),
-      this.db.order.aggregate({ where: { outletId: id, status: { not: "CANCELLED" } }, _count: true, _sum: { units: true, weightKg: true, deferCount: true } }),
-      this.db.order.groupBy({ by: ["status"], where: { outletId: id }, _count: true }),
+      this.db.order.aggregate({ where: { outletId: id, status: { notIn: ["CANCELLED", "DRAFT"] } }, _count: true, _sum: { units: true, weightKg: true, deferCount: true } }),
+      this.db.order.groupBy({ by: ["status"], where: { outletId: id, status: { not: "DRAFT" } }, _count: true }),
       this.db.issue.findMany({
         where: { OR: [{ outletId: id }, { order: { outletId: id } }] },
         orderBy: { createdAt: "desc" },

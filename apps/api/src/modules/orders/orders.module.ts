@@ -24,6 +24,7 @@ export class OrdersService {
 
     const where: Prisma.OrderWhereInput = {
       depotId: q.depotId,
+      status: { not: "DRAFT" },
       OR: [{ deliveryDate: date }, ...(plan ? [{ decisions: { some: { planId: plan.id } } }] : [])],
       ...(q.brand ? { brand: q.brand as Prisma.EnumBrandFilter["equals"] } : {}),
       ...(q.district ? { outlet: { districtId: q.district } } : {}),

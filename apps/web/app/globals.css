@@ -173,3 +173,25 @@
     animation: none;
   }
 }
+
+/*
+ * Store manager accessibility.
+ * The brand green is a fill colour (buttons, chips), so as *text* it is too weak: 2.4:1 on the dark theme and
+ * 4.1:1 on tinted backgrounds in the light one. StoreShell sets data-app="store" on <html>, and these rules give
+ * text-primary a stronger shade and muted text a little more contrast, only inside the store manager app.
+ */
+html[data-app="store"] {
+  --muted-foreground: oklch(0.49 0 0);
+}
+html[data-app="store"] .text-primary {
+  color: oklch(0.44 0.13 150);
+}
+html[data-app="store"].dark {
+  --muted-foreground: oklch(0.74 0 0);
+}
+html[data-app="store"].dark .text-primary {
+  color: oklch(0.82 0.17 150);
+}
+html[data-app="store"].dark .text-destructive {
+  color: oklch(0.8 0.14 25);
+}

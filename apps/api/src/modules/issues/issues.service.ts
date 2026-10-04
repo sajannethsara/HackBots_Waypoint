@@ -175,7 +175,7 @@ export class IssuesService {
       const outletId = issue.outletId ?? issue.order?.outletId
       const managers = outletId ? await this.db.user.findMany({ where: { role: "STORE_MANAGER", outletId }, select: { id: true } }) : []
       for (const m of managers)
-        notes.push({ userId: m.id, type: "ISSUE_UPDATE", title: `${issue.ref}: ${ISSUE_TYPE_META[issue.type].label}`, body: input.resolution, link: `/store/issues/${issue.id}` })
+        notes.push({ userId: m.id, type: "ISSUE_UPDATE", title: `${issue.ref}: ${ISSUE_TYPE_META[issue.type].label}`, body: input.resolution, link: `/store-manager/issues/${issue.id}` })
     }
     if (playbook.some((a) => a.effect === "NOTIFY_DRIVER") && issue.trip?.driverId)
       notes.push({ userId: issue.trip.driverId, type: "DISPATCH_MESSAGE", title: `Dispatcher · ${issue.trip.ref}`, body: input.resolution, link: "/driver" })

@@ -72,6 +72,7 @@ enum TempRequirement {
 }
 
 enum OrderStatus {
+  DRAFT // saved by the store, not yet submitted; invisible to dispatch
   SUBMITTED // confirmed before cutoff, waiting for planning
   PLANNED // on a published plan
   DEFERRED // moved to a later run
@@ -191,6 +192,26 @@ enum ReceiptStatus {
   DISPUTED
 }
 
+enum ChangeKind {
+  WINDOW // receiving window
+  ACCESS // dock type and parking constraint
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// How the store found a received line
+enum LineCondition {
+  GOOD
+  DAMAGED
+  EXPIRED
+  WRONG_ITEM
+}
+
 enum MediaKind {
   SIGNATURE
   PHOTO
@@ -256,27 +277,71 @@ model District {
 
 // outlets.csv
 model Outlet {
-  id                 String            @id // "OUT001"
+  id                 String                @id // "OUT001"
   name               String
   brand              Brand
   districtId         String
-  district           District          @relation(fields: [districtId], references: [id])
+  district           District              @relation(fields: [districtId], references: [id])
   depotId            String
-  depot              Depot             @relation(fields: [depotId], references: [id])
+  depot              Depot                 @relation(fields: [depotId], references: [id])
   dockType           DockType
   parkingConstraint  ParkingConstraint
   mallWindowOpenMin  Int?
   mallWindowCloseMin Int?
   windowOpenMin      Int
   windowCloseMin     Int
-  lastDeliveredOn    DateTime?         @db.Date // drives "days since last served"
+  lastDeliveredOn    DateTime?             @db.Date // drives "days since last served"
   lat                Float? // map enrichment: deterministic point near the district centre
   lng                Float?
   managers           User[]
   orders             Order[]
   issues             Issue[]
+  profile            OutletProfile?
+  changeRequests     OutletChangeRequest[]
 
   @@index([depotId, brand, districtId])
+}
+
+// What the store tells us about itself. Not part of the datathon CSVs, so it lives beside the outlet.
+model OutletProfile {
+  outletId              String   @id
+  outlet                Outlet   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  address               String?
+  phone                 String?
+  email                 String?
+  tradingOpenMin        Int?
+  tradingCloseMin       Int?
+  floorAreaM2           Int?
+  departments           Json     @default("[]") // [{ name, areaM2 }]: the footprint of each department
+  leadership            Json     @default("[]") // [{ role, name, phone, email }]
+  receivingContactName  String?
+  receivingContactPhone String?
+  receivingStaff        Int?
+  hasForklift           Boolean  @default(false)
+  hasColdRoom           Boolean  @default(false)
+  receivingNotes        String?
+  updatedAt             DateTime @updatedAt @db.Timestamptz
+}
+
+// A store asking for something that changes how it is planned (window, dock, parking). The dispatcher decides.
+model OutletChangeRequest {
+  id            String        @id @default(cuid())
+  outletId      String
+  outlet        Outlet        @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  kind          ChangeKind
+  current       Json
+  proposed      Json
+  reason        String
+  status        RequestStatus @default(PENDING)
+  requestedById String
+  requestedBy   User          @relation("ChangeRequestedBy", fields: [requestedById], references: [id])
+  createdAt     DateTime      @default(now()) @db.Timestamptz
+  decidedById   String?
+  decidedBy     User?         @relation("ChangeDecidedBy", fields: [decidedById], references: [id])
+  decidedAt     DateTime?     @db.Timestamptz
+  decisionNote  String?
+
+  @@index([outletId, status])
 }
 
 // vehicles.csv
@@ -406,6 +471,7 @@ model Order {
   status          OrderStatus     @default(SUBMITTED)
   deferCount      Int             @default(0)
   notes           String?
+  windowPref      String? // store's preferred receiving slot, "HH:MM-HH:MM"; a preference, not a planner constraint
   submittedAt     DateTime        @default(now()) @db.Timestamptz
   updatedAt       DateTime        @updatedAt @db.Timestamptz
   createdById     String
@@ -434,6 +500,22 @@ model LoadLine {
   countedAt   DateTime  @updatedAt @db.Timestamptz
 
   @@id([stopId, orderLineId])
+// What a store can order. Unit weight/volume are calibrated to each brand's real average per unit.
+model Product {
+  id           String          @id @default(cuid())
+  sku          String          @unique
+  name         String
+  brand        Brand
+  category     String
+  temp         TempRequirement
+  unitLabel    String // "1 L pack", "carton", "each"
+  unitWeightKg Float
+  unitVolumeM3 Float
+  maxQty       Int             @default(200) // per order line
+  isActive     Boolean         @default(true)
+  lines        OrderLine[]
+
+  @@index([brand, temp, isActive])
 }
 
 model OrderLine {
@@ -442,10 +524,13 @@ model OrderLine {
   order         Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   description   String
   category      String // DAIRY, MEAT, PRODUCE, DRY, GARMENT, APPLIANCE ...
+  productId     String? // null for historical orders imported from the datathon CSVs
+  product       Product?       @relation(fields: [productId], references: [id])
   quantity      Int
   weightKg      Float
   volumeM3      Float
   deliveryLines DeliveryLine[]
+  receiptLines  ReceiptLine[]
   issues        Issue[]
   loadLines     LoadLine[]
 }
@@ -614,7 +699,8 @@ model MediaAsset {
   kind         MediaKind
   mimeType     String
   sizeBytes    Int
-  data         Bytes // compressed on device; small enough for Postgres
+  data         Bytes // compressed on device; small enough for Postgres. Empty when the file lives in `filePath`.
+  filePath     String? // relative to the uploads folder (see MediaStorage); set for store issue photos
   createdAt    DateTime         @default(now()) @db.Timestamptz
   podSignature ProofOfDelivery? @relation("PodSignature")
   podPhoto     ProofOfDelivery? @relation("PodPhoto")
@@ -632,6 +718,22 @@ model Receipt {
   confirmedById String
   confirmedBy   User          @relation(fields: [confirmedById], references: [id])
   confirmedAt   DateTime      @default(now()) @db.Timestamptz
+  lines         ReceiptLine[]
+}
+
+// One row per order line when the store counts a delivery in. A shortage is receivedQty < expectedQty.
+model ReceiptLine {
+  id          String        @id @default(cuid())
+  receiptId   String
+  receipt     Receipt       @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  orderLineId String
+  orderLine   OrderLine     @relation(fields: [orderLineId], references: [id])
+  expectedQty Int // what the driver recorded as delivered (DeliveryLine.deliveredQty), the baseline for the count
+  receivedQty Int
+  condition   LineCondition @default(GOOD)
+  notes       String?
+
+  @@unique([receiptId, orderLineId])
 }
 
 // Single exception table for every role and stage

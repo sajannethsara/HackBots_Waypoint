@@ -340,7 +340,7 @@ export class DriverService {
               type: "DELIVERY_UPDATE",
               title: `${stop!.order.ref} ${ev.type === "DELIVERED" ? "delivered" : ev.type === "PARTIAL" ? "partly delivered" : "refused"}`,
               body: ev.pod ? `Received by ${ev.pod.recipientName}. Please confirm what arrived.` : (ev.reason ?? "Delivery recorded by the driver."),
-              link: "/store",
+              link: `/store-manager/orders/${stop!.orderId}`,
             })),
           }),
         )
