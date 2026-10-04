@@ -11,6 +11,7 @@ import { DriverModule } from "./modules/driver/driver.module"
 import { HealthModule } from "./modules/health/health.module"
 import { IssueChatModule } from "./modules/issue-chat/issue-chat.module"
 import { IssuesModule } from "./modules/issues/issues.module"
+import { AgentModule } from "./modules/agent/agent.module"
 import { MediaModule } from "./modules/media/media.module"
 import { LiveModule } from "./modules/live/live.module"
 import { LoaderModule } from "./modules/loader/loader.module"
@@ -43,6 +44,7 @@ import { ReferenceModule } from "./modules/reference/reference.module"
     ExceptionsModule,
     LiveModule,
     IssuesModule,
+    AgentModule,
     IssueChatModule,
     ChatModule,
     TripsModule,

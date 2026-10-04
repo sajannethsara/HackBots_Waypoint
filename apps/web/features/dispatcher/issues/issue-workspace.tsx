@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Ban, Bell, CalendarClock, Check, CheckCircle2, ChevronRight, Eye, PackageMinus, PackagePlus, Truck, Wrench } from "lucide-react"
+import { Ban, Bell, CalendarClock, Check, CheckCircle2, ChevronRight, Eye, PackageMinus, PackagePlus, Sparkles, Truck, Wrench } from "lucide-react"
 import { DEFERRAL_REASONS, DEFERRAL_REASON_META, ISSUE_TYPE_META, type DeferralReason, type IssueActionOption } from "@waypoint/shared"
 import { TONE } from "@/components/shared/badges"
 import { Button } from "@/components/ui/button"
@@ -19,7 +19,15 @@ import { fmtDateTime, timeAgo } from "@/lib/format"
 import type { IssueDetail } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useAcknowledgeIssue, useResolveIssue } from "../queries"
+import { AgentPanel } from "./agent-panel"
+import { useIssueAgent } from "./use-issue-agent"
 import { useIssueActions, useRunIssueAction } from "./use-issue-workflow"
+
+/**
+ * On wide screens the workspace is pinned beside the issue, so long tabs scroll inside it (the status steps and
+ * tab bar stay in view) instead of running off the bottom of the screen. The chat sizes and scrolls itself.
+ */
+const SCROLL_PANEL = "p-3 xl:max-h-[calc(100dvh-17rem)] xl:overflow-y-auto xl:overscroll-contain"
 
 /**
  * Where an issue gets solved. The people involved talk in the Chat tab; dispatch takes decisions that
@@ -27,6 +35,8 @@ import { useIssueActions, useRunIssueAction } from "./use-issue-workflow"
  */
 export function IssueWorkspace({ issue }: { issue: IssueDetail }) {
   const actions = useIssueActions(issue.id)
+  const agent = useIssueAgent(issue.id).data
+  const agentNeedsYou = agent?.status === "PLAN_READY" && agent.steps.some((s) => s.plan === agent.plan && s.status === "PROPOSED")
   const available = actions.data?.actions.filter((a) => a.available).length ?? 0
   const resolved = issue.status === "RESOLVED"
   // Controlled: the issue flips to resolved while this is mounted.
@@ -39,6 +49,10 @@ export function IssueWorkspace({ issue }: { issue: IssueDetail }) {
         <div className="border-b px-3 py-2">
           <TabsList className="w-full">
             <TabsTrigger value="chat">Chat</TabsTrigger>
+            <TabsTrigger value="agent" className="gap-1">
+              {agent?.status === "THINKING" ? <Spinner className="size-3" /> : <Sparkles className="size-3.5" />} Agent
+              {agentNeedsYou && <span className="size-1.5 rounded-full bg-primary" aria-label="A plan is waiting for your review" />}
+            </TabsTrigger>
             <TabsTrigger value="decisions" className="gap-1.5">
               Decisions
               {!resolved && available > 0 && <span className="rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground tabular-nums">{available}</span>}
@@ -49,10 +63,13 @@ export function IssueWorkspace({ issue }: { issue: IssueDetail }) {
         <TabsContent value="chat" className="p-3">
           <IssueChatCard issueId={issue.id} bare />
         </TabsContent>
-        <TabsContent value="decisions" className="p-3">
+        <TabsContent value="agent" className={SCROLL_PANEL}>
+          <AgentPanel issue={issue} />
+        </TabsContent>
+        <TabsContent value="decisions" className={SCROLL_PANEL}>
           <Decisions issue={issue} />
         </TabsContent>
-        <TabsContent value="resolve" className="p-3">
+        <TabsContent value="resolve" className={SCROLL_PANEL}>
           <ResolveTab issue={issue} />
         </TabsContent>
       </Tabs>

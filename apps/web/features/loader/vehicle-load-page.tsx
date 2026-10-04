@@ -418,8 +418,9 @@ function LoadList({
             </Button>
           </div>
         </div>
-        {/* No inner scroller: the page scrolls normally (wheel/touch anywhere); the finish bar is sticky. */}
-        <ol className="grid gap-2 p-3">
+        {/* Tablets and up: long loading sequences scroll inside the card so the header and the finish bar stay in view.
+            Phones: the list flows with the page — a nested scroll box there traps the swipe and the page gets stuck. */}
+        <ol className="grid gap-2 p-3 md:max-h-[calc(100dvh-16rem)] md:overflow-y-auto">
           {order.map((s, i) => (
             <StopRow
               key={s.id}
