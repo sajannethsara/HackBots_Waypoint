@@ -1,0 +1,100 @@
+# Production stack for the EC2 box. Images are built in CI and pulled from GHCR (never built on the server).
+#   cd /opt/waypoint && docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
+# Needs a .env next to this file (see .env.prod.example). Only Caddy is exposed to the internet.
+name: waypoint
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    mem_limit: 256m
+    logging: *logging
+    environment:
+      POSTGRES_USER: waypoint
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: waypoint
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U waypoint -d waypoint"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: apply migrations, seed (no-op if already seeded), exit. `up -d` waits for it before starting the API.
+  migrate:
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER in .env}/waypoint-api:${IMAGE_TAG:-latest}
+    restart: "no"
+    mem_limit: 300m
+    logging: *logging
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: &dburl postgresql://waypoint:${POSTGRES_PASSWORD}@db:5432/waypoint?schema=public
+    working_dir: /repo/packages/db
+    command: ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/seed/index.js"]
+
+  api:
+    image: ghcr.io/${GHCR_OWNER}/waypoint-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 350m
+    logging: *logging
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: *dburl
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
+      DEMO_MODE: ${DEMO_MODE:-true}
+      DEMO_PING_SECONDS: ${DEMO_PING_SECONDS:-10}
+      GPS_PING_SECONDS: ${GPS_PING_SECONDS:-240}
+      ARRIVE_RADIUS_M: ${ARRIVE_RADIUS_M:-150}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  web:
+    image: ghcr.io/${GHCR_OWNER}/waypoint-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 300m
+    logging: *logging
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_URL: http://api:4000
+      MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
+      PUBLIC_WS_URL: https://${SITE_HOST:?set SITE_HOST in .env}
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    mem_limit: 64m
+    logging: *logging
+    depends_on:
+      - web
+    environment:
+      SITE_HOST: ${SITE_HOST}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # certificates — keep, or Let's Encrypt rate limits bite
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

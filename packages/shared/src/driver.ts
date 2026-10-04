@@ -100,6 +100,10 @@ export interface DriverTrip {
   steps: DriverNavStep[][] | null
   vehicle: { id: string; label: string; chilled: boolean }
   stops: DriverStop[]
+  /** When this driver claimed the trip at the depot (null until they do). */
+  claimedAt: string | null
+  /** Dispatch has let the trip out of the depot; the driver can start the run. */
+  released: boolean
   departedAt: string | null
   completedAt: string | null
 }

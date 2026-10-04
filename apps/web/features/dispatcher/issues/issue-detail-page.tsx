@@ -12,7 +12,9 @@ import type { IssueDetail } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useIssue, useTripDetail } from "../queries"
 import { TripMap, plannedAsLive } from "../trips/detail/trip-map"
+import { CarryOverCard } from "./carry-over-card"
 import { AutoBadge, IssueStatusBadge, SeverityBadge, StageBadge } from "./issue-badges"
+import { IssuePhotos } from "./issue-photos"
 import { IssueWorkspace } from "./issue-workspace"
 
 const HISTORY_LABEL: Record<string, string> = {
@@ -70,6 +72,8 @@ export function IssueDetailPage({ id, mapboxToken }: { id: string; mapboxToken?:
             </CardContent>
           </Card>
 
+          <IssuePhotos issue={issue} />
+
           {issue.trip && <IssueRouteMap tripId={issue.trip.id} stopId={issue.stopId ?? undefined} mapboxToken={mapboxToken} />}
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -123,7 +127,10 @@ export function IssueDetailPage({ id, mapboxToken }: { id: string; mapboxToken?:
           </Card>
         </div>
 
-        <IssueWorkspace issue={issue} />
+        <div className="grid h-fit gap-3 xl:sticky xl:top-18">
+          <IssueWorkspace issue={issue} />
+          <CarryOverCard issue={issue} />
+        </div>
       </div>
     </div>
   )

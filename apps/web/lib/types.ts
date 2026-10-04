@@ -48,6 +48,8 @@ export interface OutletLite {
   mallWindowOpenMin?: number | null
   mallWindowCloseMin?: number | null
   lastDeliveredOn?: string | null
+  lat?: number | null
+  lng?: number | null
 }
 
 export interface ResourceUsage {
@@ -106,6 +108,7 @@ export interface Stop {
     weightKg: number
     volumeM3: number
     deferCount: number
+    carriedFromOrderId: string | null
     outlet: OutletLite
   }
 }
@@ -126,6 +129,12 @@ export interface Trip {
   loadWeightKg: number
   loadVolumeM3: number
   driver: { id: string; name: string } | null
+  loader: { id: string; name: string } | null
+  /** Depot gate */
+  driverClaimedAt: string | null
+  loaderClaimedAt: string | null
+  heldAt: string | null
+  liveAt: string | null
   stops: Stop[]
 }
 
@@ -159,6 +168,7 @@ export interface Decision {
     weightKg: number
     volumeM3: number
     deferCount: number
+    carriedFromOrderId: string | null
     outletId: string
     requestedDate: string
     outlet: OutletLite
@@ -167,9 +177,37 @@ export interface Decision {
   }
 }
 
+/** Server-side timing + rule check of a trip in the dispatcher's sequence (nothing saved). */
+export interface TripPreview {
+  tripId: string
+  departMin: number
+  endMin: number
+  durationMin: number
+  km: number
+  fuelL: number
+  loadWeightKg: number
+  loadVolumeM3: number
+  vehicleUsedMin: number
+  budgetMin: number
+  vehicleFuelL: number
+  stops: {
+    orderId: string
+    seq: number
+    arrivalMin: number
+    waitMin: number
+    serviceMin: number
+    windowOpenMin: number
+    windowCloseMin: number
+    atRisk: boolean
+    riskReason: string | null
+  }[]
+  violations: { rule: string; message: string }[]
+}
+
 export interface Plan {
   id: string
   depotId: string
+  depot: { id: string; name: string; lat: number | null; lng: number | null }
   date: string
   version: number
   status: "DRAFT" | "PUBLISHED" | "SUPERSEDED"
@@ -199,6 +237,7 @@ export interface OrderRow {
   weightKg: number
   volumeM3: number
   deferCount: number
+  carriedFromOrderId: string | null
   status: string
   requestedDate: string
   deliveryDate: string
@@ -323,10 +362,23 @@ export interface IssueDetail extends Omit<IssueRow, "trip" | "stop" | "order" | 
   stop: { seq: number; plannedArrivalMin: number; status: string } | null
   order: { id: string; ref: string; temp: "CHILLED" | "AMBIENT"; units: number; weightKg: number; volumeM3: number; lines: OrderLine[] } | null
   orderLine: OrderLine | null
+  carryOverOrder: {
+    id: string
+    ref: string
+    status: string
+    deliveryDate: string
+    units: number
+    weightKg: number
+    lines: { id: string; description: string; quantity: number }[]
+    carryOverIssues: { id: string; ref: string }[]
+    stops: { seq: number; trip: { id: string; ref: string; plan: { status: string } } }[]
+  } | null
   outlet: { id: string; name: string; districtId: string; windowOpenMin: number; windowCloseMin: number; managers: { name: string; phone: string | null }[] } | null
   vehicle: { id: string; type: string; temp: string; status: string } | null
   history: { id: string; action: string; createdAt: string; actor: { name: string } | null; after: Record<string, unknown> | null }[]
   playbook: IssuePlaybookAction[]
+  /** Photos the reporter attached, in upload order. Optional so an older API cannot crash the page. */
+  photos?: IssuePhotoAsset[]
 }
 
 export interface AuditEntry {
@@ -405,6 +457,26 @@ export interface TripDetail {
 }
 
 // ── Resource detail pages (vehicles, outlets, orders) ──
+
+/** One photo attached to an issue; the image itself is served by /api/media/:id. */
+export interface IssuePhotoAsset {
+  id: string
+  mimeType: string
+  sizeBytes: number
+  createdAt: string
+}
+
+/** Missing/damaged units of one issue, re-sent to the outlet on a carry-over order. */
+export interface CarriedItem {
+  id: string
+  ref: string
+  type: IssueType
+  status: IssueStatus
+  quantity: number | null
+  orderLine: { description: string } | null
+  order: { id: string; ref: string } | null
+  carryOverOrder: { id: string; ref: string; status: string; deliveryDate: string } | null
+}
 
 export interface IssueChip {
   id: string
@@ -519,6 +591,12 @@ export interface OrderDetail {
   submittedAt: string
   notes: string | null
   createdBy: { name: string }
+  /** Set on a carry-over order: the order whose missing/damaged units it re-sends. */
+  carriedFrom: { id: string; ref: string } | null
+  /** On a carry-over order: the items it re-sends. Optional so an older API cannot crash the page. */
+  carryOverIssues?: CarriedItem[]
+  /** On an original order: its items re-sent on a later carry-over order. */
+  carriedOut?: CarriedItem[]
   depot: { id: string; name: string }
   outlet: OutletLite & {
     brand: Brand
@@ -564,4 +642,84 @@ export interface OrderDetail {
   receipt: { status: string; notes: string | null; confirmedAt: string; confirmedBy: { name: string } } | null
   issues: IssueChip[]
   audit: { id: string; action: string; at: string; actor: string; entityType: string; after: unknown }[]
+}
+
+/** Everything that needs the dispatcher's attention for a depot and day. */
+export interface ExceptionsOverview {
+  plan: { id: string; status: "DRAFT" | "PUBLISHED"; version: number } | null
+  clockMinute: number
+  counts: { deferred: number; atRisk: number; gate: number; deliveries: number; issues: number; fleet: number }
+  deferred: {
+    orderId: string
+    ref: string
+    outlet: { id: string; name: string; districtId: string }
+    brand: Brand
+    temp: "CHILLED" | "AMBIENT"
+    weightKg: number
+    volumeM3: number
+    deferCount: number
+    priorityScore: number
+    reason: DeferralReason | null
+    source: "ENGINE" | "DISPATCHER"
+    unavoidable: boolean
+    explanation: string | null
+    by: string | null
+  }[]
+  atRisk: {
+    stopId: string
+    seq: number
+    tripId: string
+    tripRef: string
+    vehicleId: string
+    brand: Brand
+    live: boolean
+    orderId: string
+    orderRef: string
+    outlet: { id: string; name: string; districtId: string }
+    arrivalMin: number
+    windowCloseMin: number
+    reason: string | null
+  }[]
+  gate: {
+    tripId: string
+    ref: string
+    vehicleId: string
+    brand: Brand
+    districtId: string
+    stops: number
+    departMin: number
+    overdue: boolean
+    held: boolean
+    driver: string | null
+    driverClaimedAt: string | null
+    loader: string | null
+    loaderClaimedAt: string | null
+  }[]
+  deliveries: {
+    stopId: string
+    status: "PARTIAL" | "REFUSED"
+    at: string | null
+    tripId: string
+    tripRef: string
+    driver: string | null
+    orderId: string
+    orderRef: string
+    outlet: { id: string; name: string; districtId: string }
+    refusedQty: number
+    reason: string | null
+    receivedBy: string | null
+  }[]
+  issues: {
+    id: string
+    ref: string
+    type: IssueType
+    severity: IssueSeverity
+    status: IssueStatus
+    description: string
+    createdAt: string
+    tripRef: string | null
+    outletId: string | null
+    orderRef: string | null
+  }[]
+  fleet: { id: string; type: "TRUCK" | "VAN"; temp: "REEFER" | "AMBIENT"; kind: "WORKSHOP" | "FUEL"; usedL: number; quotaL: number }[]
 }

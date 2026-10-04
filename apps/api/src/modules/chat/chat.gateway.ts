@@ -41,9 +41,15 @@ export class ChatGateway implements OnGatewayConnection {
     }
   }
 
+  
   /** Deliver to every dispatcher and to each listed user (issue group chats). */
   publishTo(_depotId: string, userIds: string[], event: string, payload: unknown) {
     this.server?.to([DISPATCHERS_ROOM, ...userIds.map(userRoom)]).emit(event, payload)
+  }
+
+  /** Deliver to one side of a conversation only: the desk, or the member. */
+  publishToSide(conv: { depotId: string; memberId: string }, side: "desk" | "member", event: "cleared", payload: unknown) {
+    this.server?.to(side === "desk" ? deskRoom(conv.depotId) : userRoom(conv.memberId)).emit(event, payload)
   }
 
   /** Deliver to the depot's dispatch desk and to the member on the other side. */

@@ -1,11 +1,42 @@
 "use client"
 
-import { Fragment, useMemo, useState } from "react"
-import { AlertTriangle, ArrowDownToLine, Clock, Fuel, PackageCheck, Search, Send, Snowflake, Trash2, User, Warehouse } from "lucide-react"
-import { RULES, type Brand } from "@waypoint/shared"
-import { BrandBadge, ReasonBadge, TagBadge, TempIcon, TONE } from "@/components/shared/badges"
+import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  pointerWithin,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core"
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable"
+import dynamic from "next/dynamic"
+import {
+  AlertTriangle,
+  ClipboardList,
+  ListOrdered,
+  Lock,
+  Map as MapIcon,
+  Plus,
+  Radio,
+  Warehouse,
+  Save,
+  Search,
+  Send,
+  Snowflake,
+  Trash2,
+} from "lucide-react"
+import { useTheme } from "next-themes"
+import { useEffect, useState } from "react"
+import type { Brand, DeferOrderInput } from "@waypoint/shared"
+import { BrandBadge, TagBadge } from "@/components/shared/badges"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import {
   Dialog,
   DialogClose,
@@ -18,94 +49,543 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { fmtNum, minToHHMM, pct } from "@/lib/format"
+import { minToHHMM, pct } from "@/lib/format"
 import type { Decision, Plan, Trip } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import { useDiscardPlan, usePublishPlan } from "../queries"
-import { ScoreBreakdown } from "../shared/score-breakdown"
-import { outletWindow } from "../shared/window"
+import {
+  useDiscardPlan,
+  usePublishPlan,
+  useRemoveTrip,
+  useResetTrip,
+  useSaveLayout,
+  useTripPreview,
+} from "../queries"
+import { AddTripDialog } from "./add-trip-dialog"
+import { useCanvas, type PoolItem } from "./canvas"
 import { AssignDialog } from "./assign-dialog"
+import { DeferredCardView, DeferredRail } from "./deferred-rail"
 import { DeferSheet } from "./defer-sheet"
+import { TripCanvas } from "./trip-canvas"
+import { TripDetails } from "./trip-details"
 
-export function ReviewStep({ plan }: { plan: Plan }) {
-  const trips = useMemo(() => plan.trips.filter((t) => t.stops.length), [plan.trips])
+const TripMap = dynamic(() => import("./trip-map"), {
+  ssr: false,
+  loading: () => <Skeleton className="m-4 flex-1 rounded-xl" />,
+})
+
+const HEIGHT = "xl:h-[calc(100dvh-16rem)] xl:min-h-[600px]"
+const BRAND_HEX: Record<Brand, string> = {
+  FRESH: "#16a34a",
+  STYLE: "#db2777",
+  TECH: "#0284c7",
+}
+
+type Tab = "stops" | "map" | "details"
+
+/** Engine order: earliest window close first, then earliest open. */
+function windowOrder(ids: string[], decisions: Map<string, Decision>) {
+  const win = (id: string) => {
+    const o = decisions.get(id)!.order.outlet
+    return [
+      Math.max(o.windowOpenMin ?? 0, o.mallWindowOpenMin ?? 0),
+      Math.min(o.windowCloseMin ?? 1440, o.mallWindowCloseMin ?? 1440),
+    ] as const
+  }
+  return ids.toSorted((a, b) => win(a)[1] - win(b)[1] || win(a)[0] - win(b)[0])
+}
+
+/** Pointer position decides the target: a trip card wins, then the deferred rail, then the stop under the pointer. */
+const collision: CollisionDetection = (args) => {
+  const type = (id: string | number) =>
+    args.droppableContainers.find((c) => c.id === id)?.data.current?.type as
+      string | undefined
+  const hits = pointerWithin(args)
+  const of = (t: string) => hits.filter((h) => type(h.id) === t)
+  if (!hits.length)
+    return closestCenter({
+      ...args,
+      droppableContainers: args.droppableContainers.filter(
+        (c) => c.data.current?.type === "stop"
+      ),
+    })
+  return of("trip").length
+    ? of("trip")
+    : of("pool-zone").length
+      ? of("pool-zone")
+      : of("stop").length
+        ? of("stop")
+        : hits
+}
+
+function useDebounced<T>(value: T, ms: number) {
+  const [v, setV] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms)
+    return () => clearTimeout(t)
+  }, [value, ms])
+  return [v, setV] as const
+}
+
+/** A trip that has gone live is on the road: visible, never editable. */
+const isLive = (t: Trip) =>
+  !!t.liveAt || t.status === "DEPARTED" || t.status === "COMPLETED"
+
+export function ReviewStep({
+  plan,
+  mapboxToken,
+  onOpenGate,
+}: {
+  plan: Plan
+  mapboxToken?: string
+  onOpenGate?: () => void
+}) {
+  const published = plan.status === "PUBLISHED"
+  const canvas = useCanvas(plan)
+  const { layout, server, defers, pool, decisions, dirtyTrips } = canvas
   const [brand, setBrand] = useState<"ALL" | Brand>("ALL")
   const [q, setQ] = useState("")
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [deferring, setDeferring] = useState<Decision | null>(null)
+  const [tab, setTab] = useState<Tab>("stops")
+  const [deferring, setDeferring] = useState<{
+    decision: Decision
+    local: boolean
+  } | null>(null)
   const [assigning, setAssigning] = useState<Decision | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const [active, setActive] = useState<{
+    type: "pool" | "stop"
+    orderId: string
+  } | null>(null)
+  const { resolvedTheme } = useTheme()
 
+  const save = useSaveLayout(plan.id)
+  const reset = useResetTrip(plan.id)
+  const removeTrip = useRemoveTrip(plan.id)
+
+  const trips = plan.trips
   const visible = trips.filter(
     (t) =>
       (brand === "ALL" || t.brand === brand) &&
-      (!q || `${t.ref} ${t.vehicleId} ${t.districtId}`.toLowerCase().includes(q.toLowerCase())),
+      (!q ||
+        `${t.ref} ${t.vehicleId} ${t.districtId}`
+          .toLowerCase()
+          .includes(q.toLowerCase()))
   )
-  const selected = trips.find((t) => t.id === selectedId) ?? visible[0] ?? trips[0]
+  const selected =
+    trips.find((t) => t.id === selectedId) ?? visible[0] ?? trips[0]
+  const orderIds = selected ? (layout[selected.id] ?? []) : []
+  const locked = !!selected && isLive(selected)
   const deferred = plan.decisions.filter((d) => d.decision === "DEFERRED")
+  const optimalOrder = windowOrder(orderIds, decisions)
   const atRiskTrips = trips.filter((t) => t.stops.some((s) => s.atRisk)).length
-  const decisionByOrder = useMemo(() => new Map(plan.decisions.map((d) => [d.orderId, d])), [plan.decisions])
+
+  // Live re-timing: every change to the sequence recalculates after a short pause; the button forces it now.
+  const key = orderIds.join(",")
+  const [settled, setSettled] = useDebounced(key, 350)
+  const preview = useTripPreview(
+    plan.id,
+    selected?.id,
+    settled ? settled.split(",") : [],
+    !!selected
+  )
+  const stale =
+    settled !== key || (preview.isFetching && preview.isPlaceholderData)
+  const recalc = () => {
+    setSettled(key)
+    void preview.refetch()
+  }
+
+  const changes = (tripId: string) => {
+    const mine = layout[tripId] ?? []
+    const base = server[tripId] ?? []
+    const moved = mine.filter(
+      (id, i) =>
+        base.includes(id) && base.filter((x) => mine.includes(x))[i] !== id
+    ).length
+    return (
+      mine.filter((id) => !base.includes(id)).length +
+      base.filter((id) => !mine.includes(id)).length +
+      moved
+    )
+  }
+
+  /** Trips that must travel together: an order moved between two edited trips is saved with both. */
+  const closure = (start: string[]) => {
+    const set = new Set(start)
+    for (const t of set)
+      for (const id of server[t] ?? []) {
+        if ((layout[t] ?? []).includes(id) || id in defers) continue
+        const dest = Object.keys(layout).find((u) => layout[u].includes(id))
+        if (dest) set.add(dest)
+      }
+    return [...set]
+  }
+  const persist = (tripIds: string[]) => {
+    const ids = closure(tripIds)
+    const owned = new Set(ids.flatMap((t) => server[t] ?? []))
+    save.mutate({
+      trips: ids.map((tripId) => ({ tripId, orderIds: layout[tripId] ?? [] })),
+      deferrals: Object.entries(defers)
+        .filter(([id]) => owned.has(id))
+        .map(([orderId, d]) => ({ orderId, ...d })),
+    })
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  const onDragStart = (e: DragStartEvent) => {
+    const d = e.active.data.current
+    if (d) setActive({ type: d.type, orderId: d.orderId })
+  }
+  const onDragEnd = (e: DragEndEvent) => {
+    setActive(null)
+    const a = e.active.data.current
+    const o = e.over?.data.current
+    if (!a || !o) return
+    if (o.type === "trip" && isLive(trips.find((t) => t.id === o.tripId)!))
+      return
+    if (locked && (o.type === "stop" || o.type === "canvas")) return
+    if (a.type === "pool") {
+      if (o.type === "stop" && selected)
+        canvas.place(a.orderId, selected.id, orderIds.indexOf(o.orderId))
+      else if (o.type === "canvas" && selected)
+        canvas.place(a.orderId, selected.id)
+      else if (o.type === "trip") canvas.place(a.orderId, o.tripId)
+    } else if (a.type === "stop" && selected) {
+      if (o.type === "stop") {
+        const from = orderIds.indexOf(a.orderId)
+        const to = orderIds.indexOf(o.orderId)
+        if (from !== to && from >= 0 && to >= 0)
+          canvas.move(selected.id, from, to)
+      } else if (o.type === "canvas")
+        canvas.move(
+          selected.id,
+          orderIds.indexOf(a.orderId),
+          orderIds.length - 1
+        )
+      else if (o.type === "pool-zone") {
+        const d = decisions.get(a.orderId)
+        if (d) setDeferring({ decision: d, local: true })
+      } else if (o.type === "trip" && o.tripId !== selected.id)
+        canvas.place(a.orderId, o.tripId)
+    }
+  }
+
+  const deferLocal = (input: DeferOrderInput) =>
+    canvas.remove(input.orderId, { reason: input.reason, note: input.note })
+  const activeDecision = active ? decisions.get(active.orderId) : undefined
+  const activePool =
+    active?.type === "pool"
+      ? pool.find((p) => p.decision.orderId === active.orderId)
+      : undefined
 
   return (
-    <div className="grid gap-3">
-      <ReviewBar plan={plan} atRiskTrips={atRiskTrips} deferred={deferred.length} trips={trips.length} />
-
-      <div className="grid gap-3 xl:grid-cols-[260px_minmax(0,1fr)_300px]">
-        {/* Trip list */}
-        <Card size="sm" className="gap-2 py-3 xl:h-[640px]">
-          <div className="grid gap-2 px-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Trips ({trips.length})</p>
-            </div>
-            <Tabs value={brand} onValueChange={(v) => setBrand(v as typeof brand)}>
-              <TabsList className="w-full">
-                {(["ALL", "FRESH", "STYLE", "TECH"] as const).map((b) => (
-                  <TabsTrigger key={b} value={b} className="text-xs">
-                    {b === "ALL" ? "All" : b.charAt(0) + b.slice(1).toLowerCase()}
-                    <span className="text-[10px] text-muted-foreground">{b === "ALL" ? trips.length : trips.filter((t) => t.brand === b).length}</span>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-            <div className="relative">
-              <Search className="absolute top-1/2 left-2 z-10 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Trip, vehicle, district" className="h-7 pl-7 text-sm" />
-            </div>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={collision}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragCancel={() => setActive(null)}
+    >
+      <div className="grid gap-3">
+        {published && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-sky-600/20 bg-sky-500/[0.06] px-4 py-2.5 text-sm dark:border-sky-400/20 dark:bg-sky-400/[0.07]">
+            <Radio className="size-4 shrink-0 text-sky-600 dark:text-sky-400" />
+            <p className="min-w-60 flex-1">
+              <span className="font-medium">
+                Plan v{plan.version} is published.
+              </span>{" "}
+              <span className="text-muted-foreground">
+                Live trips are locked. Held and waiting trips can still be
+                changed: saving one resets its crew claims, and stores are told
+                about any order that moves.
+              </span>
+            </p>
+            <Button variant="outline" size="sm" onClick={onOpenGate}>
+              <Warehouse data-icon="inline-start" /> Depot gate
+            </Button>
           </div>
-          <ScrollArea className="min-h-0 flex-1 px-3 max-xl:h-72">
-            <div className="grid gap-1.5 pb-1">
-              {visible.map((t) => (
-                <TripCard key={t.id} trip={t} active={selected?.id === t.id} onClick={() => setSelectedId(t.id)} />
-              ))}
-            </div>
-          </ScrollArea>
-        </Card>
-
-        {/* Stops */}
-        {selected ? (
-          <StopsCard trip={selected} decisionByOrder={decisionByOrder} onDefer={setDeferring} />
-        ) : (
-          <Card size="sm" className="items-center justify-center text-sm text-muted-foreground">
-            No trips in this plan.
-          </Card>
         )}
+        <ReviewBar
+          published={published}
+          plan={plan}
+          atRiskTrips={atRiskTrips}
+          deferred={deferred.length}
+          trips={trips.filter((t) => t.stops.length).length}
+          unsaved={dirtyTrips.size}
+          saving={save.isPending}
+          onSaveDraft={() => persist([...dirtyTrips])}
+        />
 
-        {/* Inspector */}
-        {selected && <TripInspector trip={selected} plan={plan} />}
+        <div className="grid gap-3 xl:grid-cols-[260px_minmax(0,1fr)_300px]">
+          {/* Trips */}
+          <Card size="sm" className={cn("gap-2 py-3", HEIGHT)}>
+            <div className="grid gap-2 px-3">
+              <div className="flex items-center justify-between gap-1">
+                <p className="text-sm font-medium">Trips ({trips.length})</p>
+                <div className="flex gap-1">
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    onClick={() => setAdding(true)}
+                  >
+                    <Plus data-icon="inline-start" /> Add
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    className="text-destructive"
+                    disabled={!selected || locked}
+                    onClick={() => setRemoving(true)}
+                  >
+                    <Trash2 data-icon="inline-start" /> Remove
+                  </Button>
+                </div>
+              </div>
+              <Tabs
+                value={brand}
+                onValueChange={(v) => setBrand(v as typeof brand)}
+              >
+                <TabsList className="w-full">
+                  {(["ALL", "FRESH", "STYLE", "TECH"] as const).map((b) => (
+                    <TabsTrigger key={b} value={b} className="text-xs">
+                      {b === "ALL"
+                        ? "All"
+                        : b.charAt(0) + b.slice(1).toLowerCase()}
+                      <span className="text-[10px] text-muted-foreground">
+                        {b === "ALL"
+                          ? trips.length
+                          : trips.filter((t) => t.brand === b).length}
+                      </span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+              <div className="relative">
+                <Search className="absolute top-1/2 left-2 z-10 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Trip, vehicle, district"
+                  className="h-7 pl-7 text-sm"
+                />
+              </div>
+            </div>
+            <ScrollArea className="min-h-0 flex-1 px-3 max-xl:h-72">
+              <div className="grid gap-1.5 pb-1">
+                {visible.map((t) => (
+                  <TripCard
+                    key={t.id}
+                    trip={t}
+                    locked={isLive(t)}
+                    count={(layout[t.id] ?? []).length}
+                    dirty={dirtyTrips.has(t.id)}
+                    active={selected?.id === t.id}
+                    onClick={() => setSelectedId(t.id)}
+                  />
+                ))}
+                {!visible.length && (
+                  <p className="py-8 text-center text-xs text-muted-foreground">
+                    No trips. Use Add to build one.
+                  </p>
+                )}
+              </div>
+            </ScrollArea>
+          </Card>
+
+          {/* Workspace */}
+          <Card size="sm" className={cn("gap-0 overflow-hidden py-0", HEIGHT)}>
+            <div className="flex items-center gap-2 border-b px-3 py-2">
+              <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+                <TabsList>
+                  <TabsTrigger value="stops" className="text-xs">
+                    <ListOrdered /> Stops
+                  </TabsTrigger>
+                  <TabsTrigger value="map" className="text-xs">
+                    <MapIcon /> Route map
+                  </TabsTrigger>
+                  <TabsTrigger value="details" className="text-xs">
+                    <ClipboardList /> Details
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              {selected && tab === "map" && (
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {selected.ref} · {selected.districtId} · {selected.vehicleId}
+                </span>
+              )}
+            </div>
+
+            {!selected ? (
+              <div className="grid flex-1 place-items-center text-sm text-muted-foreground">
+                No trips in this plan. Add one to start planning.
+              </div>
+            ) : tab === "stops" && selected ? (
+              <TripCanvas
+                locked={locked}
+                plan={plan}
+                trip={selected}
+                orderIds={orderIds}
+                decisions={decisions}
+                preview={preview.data}
+                stale={stale}
+                recalculating={preview.isFetching}
+                dirty={dirtyTrips.has(selected.id)}
+                changes={changes(selected.id)}
+                saving={save.isPending}
+                resetting={reset.isPending}
+                onRecalculate={recalc}
+                optimal={optimalOrder.join() === orderIds.join()}
+                onOptimize={() =>
+                  selected && canvas.reorder(selected.id, optimalOrder)
+                }
+                onDefer={(d) => setDeferring({ decision: d, local: true })}
+                onSave={() => persist([selected.id])}
+                onRevert={() => canvas.revert(selected.id)}
+                onReset={() => {
+                  canvas.revert(selected.id)
+                  reset.mutate(selected.id)
+                }}
+              />
+            ) : tab === "map" && selected ? (
+              mapboxToken ? (
+                <TripMap
+                  token={mapboxToken}
+                  depot={plan.depot}
+                  color={BRAND_HEX[selected.brand]}
+                  theme={resolvedTheme === "dark" ? "dark" : "light"}
+                  stops={orderIds.flatMap((id) => {
+                    const d = decisions.get(id)
+                    return d
+                      ? [
+                          {
+                            orderId: id,
+                            outletId: d.order.outlet.id,
+                            orderRef: d.order.ref,
+                            lat: d.order.outlet.lat,
+                            lng: d.order.outlet.lng,
+                            atRisk: !!preview.data?.stops.find(
+                              (s) => s.orderId === id
+                            )?.atRisk,
+                          },
+                        ]
+                      : []
+                  })}
+                />
+              ) : (
+                <div className="grid flex-1 place-items-center p-6 text-center text-sm text-muted-foreground">
+                  Set MAPBOX_ACCESS_TOKEN to show the route map.
+                </div>
+              )
+            ) : (
+              <TripDetails
+                trip={selected}
+                preview={preview.data}
+                stops={orderIds.length}
+              />
+            )}
+          </Card>
+
+          {/* Deferred orders as cards */}
+          <DeferredRail
+            pool={pool}
+            canAssign={!published}
+            trip={locked ? undefined : selected}
+            height={HEIGHT}
+            onAdd={(orderId) => selected && canvas.place(orderId, selected.id)}
+            onAssign={(i: PoolItem) => setAssigning(i.decision)}
+          />
+        </div>
+
+        <DeferSheet
+          key={`defer-${deferring?.decision.orderId ?? "none"}-${deferring?.local}`}
+          planId={plan.id}
+          decision={deferring?.decision ?? null}
+          onClose={() => setDeferring(null)}
+          onSubmit={deferring?.local ? deferLocal : undefined}
+        />
+        <AssignDialog
+          key={`assign-${assigning?.orderId ?? "none"}`}
+          plan={plan}
+          decision={assigning}
+          onClose={() => setAssigning(null)}
+        />
+        <AddTripDialog
+          plan={plan}
+          pool={pool}
+          open={adding}
+          onClose={() => setAdding(false)}
+          onCreated={(id) => {
+            setSelectedId(id)
+            setTab("stops")
+          }}
+        />
+        <RemoveTripDialog
+          trip={removing ? selected : undefined}
+          count={selected?.stops.length ?? 0}
+          pending={removeTrip.isPending}
+          onClose={() => setRemoving(false)}
+          onConfirm={() =>
+            selected &&
+            removeTrip.mutate(selected.id, {
+              onSuccess: () => {
+                setRemoving(false)
+                setSelectedId(null)
+              },
+            })
+          }
+        />
       </div>
 
-      <DeferredQueue deferred={deferred} onAssign={setAssigning} onDefer={setDeferring} />
-
-      <DeferSheet key={`defer-${deferring?.orderId ?? "none"}`} planId={plan.id} decision={deferring} onClose={() => setDeferring(null)} />
-      <AssignDialog key={`assign-${assigning?.orderId ?? "none"}`} plan={plan} decision={assigning} onClose={() => setAssigning(null)} />
-    </div>
+      <DragOverlay dropAnimation={null}>
+        {activePool ? (
+          <div className="w-72">
+            <DeferredCardView item={activePool} overlay />
+          </div>
+        ) : activeDecision ? (
+          <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm shadow-xl ring-1 ring-primary/40">
+            <span className="flex size-5 items-center justify-center rounded-full bg-primary text-[11px] font-medium text-primary-foreground">
+              {orderIds.indexOf(activeDecision.orderId) + 1}
+            </span>
+            <span className="font-medium">
+              {activeDecision.order.outlet.id}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {activeDecision.order.ref}
+            </span>
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   )
 }
 
-function ReviewBar({ plan, atRiskTrips, deferred, trips }: { plan: Plan; atRiskTrips: number; deferred: number; trips: number }) {
+function ReviewBar({
+  published,
+  plan,
+  atRiskTrips,
+  deferred,
+  trips,
+  unsaved,
+  saving,
+  onSaveDraft,
+}: {
+  published: boolean
+  plan: Plan
+  atRiskTrips: number
+  deferred: number
+  trips: number
+  unsaved: number
+  saving: boolean
+  onSaveDraft: () => void
+}) {
   const publish = usePublishPlan(plan.id)
   const discard = useDiscardPlan(plan.id)
   const s = plan.summary
@@ -114,56 +594,136 @@ function ReviewBar({ plan, atRiskTrips, deferred, trips }: { plan: Plan; atRiskT
       <TagBadge tone="green">
         {s.served}/{s.orders} served · {s.coveragePct}%
       </TagBadge>
-      <TagBadge tone="gray">{trips} trips · {s.vehiclesUsed} vehicles</TagBadge>
+      <TagBadge tone="gray">
+        {trips} trips · {s.vehiclesUsed} vehicles
+      </TagBadge>
       {deferred > 0 && <TagBadge tone="red">{deferred} deferred</TagBadge>}
-      {atRiskTrips > 0 && <TagBadge tone="amber">{atRiskTrips} trips with at-risk stops</TagBadge>}
+      {atRiskTrips > 0 && (
+        <TagBadge tone="amber">{atRiskTrips} trips with at-risk stops</TagBadge>
+      )}
       {s.edited && <TagBadge tone="violet">Edited by dispatcher</TagBadge>}
+      {unsaved > 0 && (
+        <TagBadge tone="amber">
+          {unsaved} unsaved trip{unsaved === 1 ? "" : "s"}
+        </TagBadge>
+      )}
       <span className="text-xs text-muted-foreground">
-        Draft v{plan.version} · engine {plan.engineVersion}
+        {published ? "Published" : "Draft"} v{plan.version} · engine{" "}
+        {plan.engineVersion}
       </span>
       <div className="ml-auto flex gap-2">
-        <Button variant="outline" size="sm" disabled={discard.isPending} onClick={() => discard.mutate()}>
-          <Trash2 data-icon="inline-start" /> Discard draft
+        {!published && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={discard.isPending}
+            onClick={() => discard.mutate()}
+          >
+            <Trash2 data-icon="inline-start" /> Discard draft
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!unsaved || saving}
+          onClick={onSaveDraft}
+        >
+          {saving ? <Spinner /> : <Save data-icon="inline-start" />}{" "}
+          {published ? "Save changes" : "Save draft"}
         </Button>
-        <Dialog>
-          <DialogTrigger render={<Button size="sm" />}>
-            <Send data-icon="inline-start" /> Publish plan
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Publish plan v{plan.version}?</DialogTitle>
-              <DialogDescription>
-                {s.served} orders go to {trips} trips. {deferred} deferred orders roll to the next run and their stores are notified with the
-                reason. Loaders and drivers see the plan immediately.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-              <Button disabled={publish.isPending} onClick={() => publish.mutate()}>
-                {publish.isPending && <Spinner />} Publish
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {!published && (
+          <Dialog>
+            <DialogTrigger render={<Button size="sm" />}>
+              <Send data-icon="inline-start" /> Publish plan
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Publish plan v{plan.version}?</DialogTitle>
+                <DialogDescription>
+                  {s.served} orders go to {trips} trips. {deferred} deferred
+                  orders roll to the next run and their stores are notified with
+                  the reason. Loaders and drivers see the plan immediately.
+                </DialogDescription>
+              </DialogHeader>
+              {unsaved > 0 && (
+                <p className="flex gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-700 ring-1 ring-amber-600/20 ring-inset dark:bg-amber-500/10 dark:text-amber-300">
+                  <AlertTriangle className="size-4 shrink-0" /> {unsaved} trip
+                  {unsaved === 1 ? " has" : "s have"} unsaved changes that will
+                  not be published. Save the draft first.
+                </p>
+              )}
+              <DialogFooter>
+                <DialogClose render={<Button variant="outline" />}>
+                  Cancel
+                </DialogClose>
+                <Button
+                  disabled={publish.isPending || unsaved > 0}
+                  onClick={() => publish.mutate()}
+                >
+                  {publish.isPending && <Spinner />} Publish
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </Card>
   )
 }
 
-function TripCard({ trip, active, onClick }: { trip: Trip; active: boolean; onClick: () => void }) {
-  const util = Math.max(pct(trip.loadWeightKg, trip.vehicle.weightCapKg), pct(trip.loadVolumeM3, trip.vehicle.volumeCapM3))
+function TripCard({
+  trip,
+  count,
+  dirty,
+  active,
+  locked,
+  onClick,
+}: {
+  trip: Trip
+  count: number
+  dirty: boolean
+  active: boolean
+  locked: boolean
+  onClick: () => void
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `trip:${trip.id}`,
+    data: { type: "trip", tripId: trip.id },
+    disabled: locked,
+  })
+  const util = Math.max(
+    pct(trip.loadWeightKg, trip.vehicle.weightCapKg),
+    pct(trip.loadVolumeM3, trip.vehicle.volumeCapM3)
+  )
   const risk = trip.stops.some((s) => s.atRisk)
   return (
     <button
+      ref={setNodeRef}
       onClick={onClick}
       className={cn(
         "grid gap-1.5 rounded-lg border bg-card p-2.5 text-left transition-colors hover:border-primary/40",
-        active && "border-primary ring-1 ring-primary",
+        active &&
+          "border-emerald-600/25 bg-emerald-500/[0.07] shadow-xs dark:border-emerald-400/25 dark:bg-emerald-400/[0.08]",
+        isOver && "border-primary bg-primary/5 ring-2 ring-primary"
       )}
     >
       <div className="flex items-center gap-2">
         <span className="text-sm font-semibold">{trip.ref}</span>
         {risk && <AlertTriangle className="size-3.5 text-amber-500" />}
+        {dirty && (
+          <span
+            className="size-1.5 rounded-full bg-amber-500"
+            title="Unsaved changes"
+          />
+        )}
+        {locked && (
+          <span
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+            title="Live: locked"
+          >
+            <Lock className="size-3" /> Live
+          </span>
+        )}
         <span className="ml-auto text-[11px] text-muted-foreground">
           {trip.vehicleId} · trip {trip.tripNo}/2
         </span>
@@ -171,295 +731,63 @@ function TripCard({ trip, active, onClick }: { trip: Trip; active: boolean; onCl
       <div className="flex items-center gap-1.5">
         <BrandBadge brand={trip.brand} />
         <TagBadge tone="gray">{trip.districtId}</TagBadge>
-        {trip.vehicle.temp === "REEFER" && <Snowflake className="size-3.5 text-sky-500" />}
+        {trip.vehicle.temp === "REEFER" && (
+          <Snowflake className="size-3.5 text-sky-500" />
+        )}
       </div>
       <div className="flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums">
-        <span>{trip.stops.length} stops</span>·<span>{Math.round(trip.plannedDurationMin)} min</span>·<span>dep {minToHHMM(trip.plannedDepartMin)}</span>
+        <span>{count} stops</span>·
+        <span>{Math.round(trip.plannedDurationMin)} min</span>·
+        <span>dep {minToHHMM(trip.plannedDepartMin)}</span>
         <span className="ml-auto">{util}%</span>
       </div>
       <div className="h-1 overflow-hidden rounded-full bg-muted">
-        <div className={cn("h-full rounded-full", util > 95 ? "bg-amber-500" : "bg-primary")} style={{ width: `${util}%` }} />
+        <div
+          className={cn(
+            "h-full rounded-full",
+            util > 95 ? "bg-amber-500" : "bg-primary"
+          )}
+          style={{ width: `${Math.min(100, util)}%` }}
+        />
       </div>
     </button>
   )
 }
 
-function StopsCard({ trip, decisionByOrder, onDefer }: { trip: Trip; decisionByOrder: Map<string, Decision>; onDefer: (d: Decision) => void }) {
-  const back = trip.plannedDepartMin + trip.plannedDurationMin
+function RemoveTripDialog({
+  trip,
+  count,
+  pending,
+  onClose,
+  onConfirm,
+}: {
+  trip?: Trip
+  count: number
+  pending: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
   return (
-    <Card size="sm" className="gap-0 py-0 xl:h-[640px]">
-      <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
-        <p className="text-sm font-semibold">{trip.ref}</p>
-        <BrandBadge brand={trip.brand} />
-        <span className="text-sm text-muted-foreground">
-          {trip.districtId} · {trip.vehicleId}
-        </span>
-        <span className="ml-auto text-xs text-muted-foreground">Loader loads in reverse stop order</span>
-      </div>
-      <ScrollArea className="min-h-0 flex-1">
-        <Table>
-          <TableHeader>
-            <TableRow className="text-xs">
-              <TableHead className="w-10 pl-4">#</TableHead>
-              <TableHead>Outlet</TableHead>
-              <TableHead>Order</TableHead>
-              <TableHead className="text-right">Load</TableHead>
-              <TableHead className="text-right">Service</TableHead>
-              <TableHead className="text-right">Arrival</TableHead>
-              <TableHead>Window</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="pr-4" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow className="bg-muted/30 text-muted-foreground">
-              <TableCell className="pl-4">
-                <Warehouse className="size-4" />
-              </TableCell>
-              <TableCell colSpan={4}>Depart depot</TableCell>
-              <TableCell className="text-right font-medium text-foreground tabular-nums">{minToHHMM(trip.plannedDepartMin)}</TableCell>
-              <TableCell colSpan={3} />
-            </TableRow>
-            {trip.stops.map((s) => {
-              const d = decisionByOrder.get(s.orderId)
-              return (
-                <TableRow key={s.id} className={cn(s.atRisk && "bg-amber-50/60 dark:bg-amber-500/5")}>
-                  <TableCell className="pl-4">
-                    <span className="flex size-5 items-center justify-center rounded-full bg-primary text-[11px] font-medium text-primary-foreground">{s.seq}</span>
-                  </TableCell>
-                  <TableCell>
-                    <div className="grid leading-tight">
-                      <span className="font-medium">{s.order.outlet.id}</span>
-                      <span className="text-[11px] text-muted-foreground">{s.order.outlet.parkingConstraint === "VAN_ONLY" ? "Van only" : s.order.outlet.dockType.replace("_", " ").toLowerCase()}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center gap-1.5">
-                      <TempIcon temp={s.order.temp} />
-                      {s.order.ref}
-                      {s.order.deferCount > 0 && <TagBadge tone="amber">↻{s.order.deferCount}</TagBadge>}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right text-xs tabular-nums">
-                    {fmtNum(s.order.weightKg)} kg
-                    <br />
-                    <span className="text-muted-foreground">{fmtNum(s.order.volumeM3, 2)} m³</span>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{s.plannedServiceMin}m</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {minToHHMM(s.plannedArrivalMin)}
-                    {s.plannedWaitMin > 0 && <div className="text-[11px] text-muted-foreground">wait {s.plannedWaitMin}m</div>}
-                  </TableCell>
-                  <TableCell className="text-xs tabular-nums">{outletWindow(s.order.outlet)}</TableCell>
-                  <TableCell>
-                    {s.atRisk ? (
-                      <Tooltip>
-                        <TooltipTrigger render={<span />}>
-                          <TagBadge tone="amber">At risk</TagBadge>
-                        </TooltipTrigger>
-                        <TooltipContent>{s.riskReason}</TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <TagBadge tone="green">On time</TagBadge>
-                    )}
-                  </TableCell>
-                  <TableCell className="pr-4 text-right">
-                    {d && (
-                      <Button variant="ghost" size="xs" className="text-destructive" onClick={() => onDefer(d)}>
-                        Defer
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-            <TableRow className="bg-muted/30 text-muted-foreground">
-              <TableCell className="pl-4">
-                <ArrowDownToLine className="size-4" />
-              </TableCell>
-              <TableCell colSpan={4}>Last stop complete (return leg excluded from budget)</TableCell>
-              <TableCell className="text-right font-medium text-foreground tabular-nums">{minToHHMM(back)}</TableCell>
-              <TableCell colSpan={3} />
-            </TableRow>
-          </TableBody>
-        </Table>
-      </ScrollArea>
-    </Card>
-  )
-}
-
-function Meter({ label, value, max, unit, digits = 0 }: { label: string; value: number; max: number; unit: string; digits?: number }) {
-  const p = pct(value, max)
-  return (
-    <div className="grid gap-1">
-      <div className="flex items-baseline justify-between text-xs">
-        <span className="text-muted-foreground">{label}</span>
-        <span className="tabular-nums">
-          {fmtNum(value, digits)} / {fmtNum(max, digits)} {unit} <span className="text-muted-foreground">({p}%)</span>
-        </span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-        <div className={cn("h-full rounded-full", p > 100 ? "bg-red-500" : p > 90 ? "bg-amber-500" : "bg-primary")} style={{ width: `${Math.min(100, p)}%` }} />
-      </div>
-    </div>
-  )
-}
-
-function TripInspector({ trip, plan }: { trip: Trip; plan: Plan }) {
-  const fresh = trip.brand === "FRESH"
-  const budget = fresh ? RULES.freshBudgetMin : RULES.styleTechBudgetMin
-  const sameClass = plan.trips.filter((t) => t.vehicleId === trip.vehicleId && (t.brand === "FRESH") === fresh && t.stops.length)
-  const used = sameClass.reduce((s, t) => s + t.plannedDurationMin, 0)
-  const vehicleFuel = plan.trips.filter((t) => t.vehicleId === trip.vehicleId).reduce((s, t) => s + t.plannedFuelL, 0)
-
-  return (
-    <Card size="sm" className="gap-3 xl:h-[640px]">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          {trip.vehicleId}
-          <TagBadge tone={trip.vehicle.temp === "REEFER" ? "blue" : "gray"}>
-            {trip.vehicle.temp === "REEFER" ? "Reefer" : "Ambient"} {trip.vehicle.type.toLowerCase()}
-          </TagBadge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-4 text-sm">
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-          <dt className="text-muted-foreground">Trip</dt>
-          <dd className="text-right font-medium">
-            {trip.ref} · {trip.tripNo} of 2
-          </dd>
-          <dt className="flex items-center gap-1 text-muted-foreground">
-            <User className="size-3" /> Driver
-          </dt>
-          <dd className="text-right font-medium">{trip.driver?.name ?? trip.vehicle.driver?.name ?? "Assigned on publish"}</dd>
-          <dt className="text-muted-foreground">District</dt>
-          <dd className="text-right font-medium">{trip.districtId}</dd>
-          <dt className="text-muted-foreground">Distance</dt>
-          <dd className="text-right font-medium tabular-nums">{fmtNum(trip.plannedKm)} km round trip</dd>
-        </dl>
-
-        <div className="grid gap-2.5">
-          <p className="flex items-center gap-1.5 text-xs font-medium">
-            <PackageCheck className="size-3.5" /> Capacity
-          </p>
-          <Meter label="Weight" value={trip.loadWeightKg} max={trip.vehicle.weightCapKg} unit="kg" />
-          <Meter label="Volume" value={trip.loadVolumeM3} max={trip.vehicle.volumeCapM3} unit="m³" digits={1} />
-        </div>
-
-        <div className="grid gap-2.5">
-          <p className="flex items-center gap-1.5 text-xs font-medium">
-            <Clock className="size-3.5" /> Time budget ({fresh ? "Fresh 03:30–08:00" : "Style + Tech trading day"})
-          </p>
-          <Meter label="This trip" value={trip.plannedDurationMin} max={budget} unit="min" />
-          <Meter label={`${trip.vehicleId} today`} value={used} max={budget} unit="min" />
-        </div>
-
-        <div className="grid gap-2.5">
-          <p className="flex items-center gap-1.5 text-xs font-medium">
-            <Fuel className="size-3.5" /> Fuel
-          </p>
-          <Meter label="Today's trips vs weekly quota" value={vehicleFuel} max={trip.vehicle.weeklyFuelQuotaL} unit="L" digits={1} />
-          <p className="text-[11px] text-muted-foreground">
-            {fmtNum(trip.plannedFuelL, 1)} L this trip at {trip.vehicle.kmPerL} km/L. Quota checked against fuel already used this ISO week.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function DeferredQueue({ deferred, onAssign, onDefer }: { deferred: Decision[]; onAssign: (d: Decision) => void; onDefer: (d: Decision) => void }) {
-  const [open, setOpen] = useState<string | null>(null)
-  return (
-    <Card size="sm" className="gap-0 py-0">
-      <CardHeader className="border-b py-3">
-        <CardTitle className="flex items-center gap-2">
-          Deferred orders <TagBadge tone="red">{deferred.length}</TagBadge>
-          <span className="text-xs font-normal text-muted-foreground">
-            Every deferral carries the binding constraint and whether it was avoidable.
-          </span>
-        </CardTitle>
-      </CardHeader>
-      {!deferred.length ? (
-        <p className="p-8 text-center text-sm text-muted-foreground">Every order is allocated.</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow className="text-xs">
-              <TableHead className="pl-4">Order</TableHead>
-              <TableHead>Outlet</TableHead>
-              <TableHead>Brand</TableHead>
-              <TableHead className="text-right">Load</TableHead>
-              <TableHead>Reason</TableHead>
-              <TableHead className="w-[38%]">Why</TableHead>
-              <TableHead className="text-right">Score</TableHead>
-              <TableHead className="pr-4" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {deferred.map((d) => {
-              const unavoidable = d.scoreBreakdown?.unavoidable === true
-              return (
-                <Fragment key={d.id}>
-                  <TableRow className="cursor-pointer" onClick={() => setOpen(open === d.id ? null : d.id)}>
-                    <TableCell className="pl-4 font-medium">
-                      <span className="inline-flex items-center gap-1.5">
-                        <TempIcon temp={d.order.temp} /> {d.order.ref}
-                        {d.order.deferCount > 0 && <TagBadge tone="red">↻{d.order.deferCount}</TagBadge>}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {d.order.outlet.id} <span className="text-muted-foreground">· {d.order.outlet.districtId}</span>
-                    </TableCell>
-                    <TableCell>
-                      <BrandBadge brand={d.order.brand} />
-                    </TableCell>
-                    <TableCell className="text-right text-xs tabular-nums">
-                      {fmtNum(d.order.weightKg)} kg · {fmtNum(d.order.volumeM3, 1)} m³
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {d.reason && <ReasonBadge reason={d.reason} />}
-                        {d.source === "DISPATCHER" ? (
-                          <TagBadge tone="violet">Dispatcher</TagBadge>
-                        ) : (
-                          <TagBadge tone={unavoidable ? "gray" : "amber"}>{unavoidable ? "Unavoidable" : "Choice"}</TagBadge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs whitespace-normal text-muted-foreground">{d.note || d.explanation}</TableCell>
-                    <TableCell className="text-right tabular-nums">{d.priorityScore}</TableCell>
-                    <TableCell className="pr-4 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-1">
-                        <Button variant="outline" size="xs" onClick={() => onAssign(d)}>
-                          Assign
-                        </Button>
-                        <Button variant="ghost" size="xs" onClick={() => onDefer(d)}>
-                          Reason
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                  {open === d.id && (
-                    <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={8} className="bg-muted/30 px-4 py-3">
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <ScoreBreakdown score={d.priorityScore} breakdown={d.scoreBreakdown} />
-                          <div className={cn("rounded-lg p-3 text-xs ring-1 ring-inset", unavoidable ? TONE.gray : TONE.amber)}>
-                            {unavoidable
-                              ? "No feasible allocation could serve this order today under the operating rules."
-                              : "This deferral was a trade-off: capacity existed but went to other orders. Try Assign to see what would break."}
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </Fragment>
-              )
-            })}
-          </TableBody>
-        </Table>
-      )}
-    </Card>
+    <Dialog open={!!trip} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Remove {trip?.ref}?</DialogTitle>
+          <DialogDescription>
+            {count
+              ? `${count} order${count === 1 ? "" : "s"} on this trip return to the deferred pool with the reason “Other”, so you can place them on another trip.`
+              : "This trip has no stops."}{" "}
+            {trip && `${trip.vehicleId} becomes free for another trip.`}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="destructive" disabled={pending} onClick={onConfirm}>
+            {pending && <Spinner />} Remove trip
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

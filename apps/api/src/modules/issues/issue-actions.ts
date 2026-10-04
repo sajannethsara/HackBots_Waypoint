@@ -2,9 +2,11 @@ import { BadRequestException, Body, ConflictException, Controller, ForbiddenExce
 import type { Prisma } from "@waypoint/db"
 import { tripDuration, tripKm } from "@waypoint/engine"
 import {
+  CARRY_OVER_ISSUE_TYPES,
   dateOnly,
   DEFAULT_DEFER_REASON,
   DEFERRAL_REASON_META,
+  formatOrderRef,
   issueActionSchema,
   toDateOnly,
   type DeferralReason,
@@ -35,9 +37,10 @@ const issueSelect = {
   tripId: true,
   stopId: true,
   vehicleId: true,
+  carryOverOrder: { select: { id: true, ref: true } },
   trip: { select: { id: true, ref: true, vehicleId: true, plan: { select: { depotId: true, date: true } } } },
-  order: { select: { id: true, ref: true, status: true, depotId: true } },
-  orderLine: { select: { id: true, description: true, quantity: true, weightKg: true, volumeM3: true } },
+  order: { select: { id: true, ref: true, status: true, depotId: true, outletId: true, brand: true, temp: true } },
+  orderLine: { select: { id: true, description: true, category: true, productId: true, quantity: true, weightKg: true, volumeM3: true, product: { select: { unitWeightKg: true, unitVolumeM3: true } } } },
   outlet: { select: { depotId: true } },
   vehicle: { select: { id: true, status: true, depotId: true } },
 } satisfies Prisma.IssueSelect
@@ -101,8 +104,15 @@ export class IssueActionsService {
       })
     }
 
+    const log = await this.db.auditLog.findMany({
+      where: { entityType: "Issue", entityId: issueId, action: "ISSUE_ACTION" },
+      orderBy: { createdAt: "desc" },
+      include: { actor: { select: { name: true } } },
+    })
+    const shortShipped = log.some((l) => (l.after as { shortShipped?: boolean } | null)?.shortShipped)
+
     if (issue.orderLineId && issue.quantity && issue.orderLine) {
-      const blocked = !issue.order ? "No order on this issue" : FINISHED_ORDER.includes(issue.order.status) ? `The order is already ${issue.order.status.toLowerCase()}` : issue.orderLine.quantity <= 0 ? "Nothing left on that line" : null
+      const blocked = this.shortShipBlock(issue, shortShipped)
       const qty = Math.min(issue.quantity, issue.orderLine.quantity)
       out.push({
         id: "short-ship",
@@ -114,11 +124,27 @@ export class IssueActionsService {
       })
     }
 
-    const log = await this.db.auditLog.findMany({
-      where: { entityType: "Issue", entityId: issueId, action: "ISSUE_ACTION" },
-      orderBy: { createdAt: "desc" },
-      include: { actor: { select: { name: true } } },
-    })
+    if ((CARRY_OVER_ISSUE_TYPES as readonly string[]).includes(issue.type) && issue.orderLine && issue.quantity && issue.order) {
+      const date = await this.clock.nextOperatingDay(await this.clock.operatingDate())
+      const blocked =
+        issue.status === "RESOLVED"
+          ? "The issue is already resolved"
+          : issue.carryOverOrder
+            ? `Already carried over on ${issue.carryOverOrder.ref}`
+            : issue.status === "OPEN"
+              ? "Acknowledge the issue first, once the report is checked"
+              : null
+      out.push({
+        id: "carry-over",
+        label: "Carry over to the next run",
+        effect: `Re-sends the units on a carry-over order for the outlet on ${date}, added to one already waiting for that day if there is one. Planning picks it up like any order (with the priority of a deferred one). The store is told.`,
+        target: issue.carryOverOrder ? `On ${issue.carryOverOrder.ref}` : `${issue.quantity} × ${issue.orderLine.description} from ${issue.order.ref}`,
+        available: !blocked,
+        unavailableReason: blocked ?? undefined,
+        canShortShip: !this.shortShipBlock(issue, shortShipped),
+      })
+    }
+
     return {
       actions: out,
       taken: log.map((l) => {
@@ -174,6 +200,10 @@ export class IssueActionsService {
       }
       case "short-ship": {
         summary = await this.shortShip(user, issue, input.note)
+        break
+      }
+      case "carry-over": {
+        summary = await this.carryOver(user, issue, input.shortShip, input.note)
         break
       }
     }
@@ -262,9 +292,9 @@ export class IssueActionsService {
   private async shortShip(user: SessionUser, issue: IssueRow, note?: string): Promise<string> {
     const line = issue.orderLine
     if (!issue.orderLineId || !issue.quantity || !line || !issue.orderId) throw new BadRequestException("This issue has no order line and quantity")
-    if (issue.order && FINISHED_ORDER.includes(issue.order.status)) throw new ConflictException(`The order is already ${issue.order.status.toLowerCase()}`)
+    const block = this.shortShipBlock(issue, await this.wasShortShipped(issue.id))
+    if (block) throw new ConflictException(block)
     const q = Math.min(issue.quantity, line.quantity)
-    if (q <= 0) throw new ConflictException("Nothing left on that line")
     const dW = Math.round((line.weightKg / line.quantity) * q * 100) / 100
     const dV = Math.round((line.volumeM3 / line.quantity) * q * 1000) / 1000
     const stop = await this.db.stop.findFirst({ where: { orderId: issue.orderId, trip: { plan: { status: "PUBLISHED" } } }, select: { trip: { select: { id: true } } } })
@@ -285,14 +315,117 @@ export class IssueActionsService {
       await tx.auditLog.create({ data: { actorId: user.sub, action: "ORDER_SHORT_SHIPPED", entityType: "Order", entityId: order.id, after: { line: line.description, removed: q, issue: issue.ref } } })
     })
     const summary = `${order.ref} ships ${q} × ${line.description} short; the store is credited.`
-    await this.audit(user, issue, "short-ship", summary)
+    await this.audit(user, issue, "short-ship", summary, { shortShipped: true })
+    return summary
+  }
+
+  /**
+   * Re-send an issue's missing/damaged units to the same outlet on the next run. One carry-over order per
+   * outlet and day: units from further issues are added to it while it is still waiting for planning.
+   */
+  private async carryOver(user: SessionUser, issue: IssueRow, alsoShortShip: boolean, note?: string): Promise<string> {
+    const { order: source, orderLine: line, quantity: qty } = issue
+    if (!(CARRY_OVER_ISSUE_TYPES as readonly string[]).includes(issue.type)) throw new BadRequestException("This kind of issue has no items to carry over")
+    if (!source || !line || !qty) throw new BadRequestException("This issue has no order line and quantity")
+    if (issue.status === "OPEN") throw new ConflictException("Acknowledge the issue first")
+    if (issue.carryOverOrder) throw new ConflictException(`Already carried over on ${issue.carryOverOrder.ref}`)
+    if (alsoShortShip) {
+      const block = this.shortShipBlock(issue, await this.wasShortShipped(issue.id))
+      if (block) throw new ConflictException(block)
+    }
+
+    // Per-unit size from the catalogue when known, else from the line as ordered (before any ship-short).
+    const unitW = line.product?.unitWeightKg ?? (line.quantity > 0 ? line.weightKg / line.quantity : 0)
+    const unitV = line.product?.unitVolumeM3 ?? (line.quantity > 0 ? line.volumeM3 / line.quantity : 0)
+    const weightKg = Math.round(unitW * qty * 100) / 100
+    const volumeM3 = Math.round(unitV * qty * 1000) / 1000
+    const date = await this.clock.nextOperatingDay(await this.clock.operatingDate())
+    const why = `${issue.ref}: ${qty} × ${line.description} from ${source.ref}${note?.trim() ? ` (${note.trim()})` : ""}`
+
+    const { carry, merged } = await this.db.$transaction(async (tx) => {
+      // Lock the issue row first, so a double click cannot create two orders.
+      const [locked] = await tx.$queryRaw<{ carryOverOrderId: string | null }[]>`SELECT "carryOverOrderId" FROM "Issue" WHERE id = ${issue.id} FOR UPDATE`
+      if (locked?.carryOverOrderId) throw new ConflictException("This issue was already carried over")
+
+      // Still waiting for planning = submitted and in no plan yet; otherwise start a new one.
+      const open = await tx.order.findFirst({
+        where: { outletId: source.outletId, deliveryDate: dateOnly(date), temp: source.temp, status: "SUBMITTED", carriedFromOrderId: { not: null }, decisions: { none: {} } },
+        select: { id: true, ref: true, notes: true },
+      })
+      const lineRow = { description: line.description, category: line.category, productId: line.productId, quantity: qty, weightKg, volumeM3 }
+      let carry: { id: string; ref: string }
+      if (open) {
+        await tx.order.update({
+          where: { id: open.id },
+          data: { units: { increment: qty }, weightKg: { increment: weightKg }, volumeM3: { increment: volumeM3 }, notes: `${open.notes ?? "Carry-over."}\n${why}`.slice(0, 2000), lines: { create: lineRow } },
+        })
+        carry = { id: open.id, ref: open.ref }
+      } else {
+        const [{ n }] = await tx.$queryRaw<{ n: bigint }[]>`SELECT nextval('order_ref_seq') AS n`
+        carry = await tx.order.create({
+          data: {
+            ref: formatOrderRef(Number(n)),
+            outletId: source.outletId,
+            brand: source.brand,
+            depotId: source.depotId,
+            temp: source.temp,
+            deliveryDate: dateOnly(date),
+            requestedDate: dateOnly(date),
+            units: qty,
+            weightKg,
+            volumeM3,
+            status: "SUBMITTED",
+            // Counts as deferred once, so the planner ranks owed goods like a deferred order.
+            deferCount: 1,
+            notes: `Carry-over.\n${why}`,
+            createdById: user.sub,
+            carriedFromOrderId: source.id,
+            lines: { create: lineRow },
+          },
+          select: { id: true, ref: true },
+        })
+      }
+      await tx.issue.update({ where: { id: issue.id }, data: { carryOverOrderId: carry.id } })
+      await tx.auditLog.create({
+        data: { actorId: user.sub, action: "ORDER_CARRY_OVER", entityType: "Order", entityId: carry.id, after: { issue: issue.ref, from: source.ref, line: line.description, units: qty, date, merged: !!open } },
+      })
+      const managers = await tx.user.findMany({ where: { role: "STORE_MANAGER", outletId: source.outletId, isActive: true }, select: { id: true } })
+      await tx.notification.createMany({
+        data: managers.map((m) => ({
+          userId: m.id,
+          type: "ORDER_UPDATED",
+          title: `${qty} × ${line.description} re-sent on ${carry.ref}`,
+          body: `Dispatch is re-sending the units from ${issue.ref} (${source.ref}) on the ${date} run.${note?.trim() ? ` ${note.trim()}` : ""}`,
+          link: `/store-manager/orders/${carry.id}`,
+        })),
+      })
+      return { carry, merged: !!open }
+    })
+
+    let summary = `${qty} × ${line.description} ${merged ? "added to carry-over order" : "carried over on new order"} ${carry.ref} for the ${date} run.`
+    if (alsoShortShip) summary += ` ${await this.shortShip(user, issue, note)}`
+    await this.audit(user, issue, "carry-over", summary)
     return summary
   }
 
   // ───────────────────────────── Helpers ─────────────────────────────
 
-  private audit(user: SessionUser, issue: IssueRow, action: IssueActionOption["id"], summary: string) {
-    return this.db.auditLog.create({ data: { actorId: user.sub, action: "ISSUE_ACTION", entityType: "Issue", entityId: issue.id, after: { action, summary } } })
+  private audit(user: SessionUser, issue: IssueRow, action: IssueActionOption["id"], summary: string, extra: Record<string, unknown> = {}) {
+    return this.db.auditLog.create({ data: { actorId: user.sub, action: "ISSUE_ACTION", entityType: "Issue", entityId: issue.id, after: { action, summary, ...extra } as Prisma.InputJsonValue } })
+  }
+
+  /** Why the issue's units cannot come off the original order now, or null when they can. */
+  private shortShipBlock(issue: IssueRow, alreadyShortShipped: boolean): string | null {
+    if (!issue.order) return "No order on this issue"
+    if (alreadyShortShipped) return "Already shipped short for this issue"
+    if (FINISHED_ORDER.includes(issue.order.status)) return `The order is already ${issue.order.status.toLowerCase()}`
+    if (!issue.orderLine || issue.orderLine.quantity <= 0) return "Nothing left on that line"
+    return null
+  }
+
+  private async wasShortShipped(issueId: string) {
+    const log = await this.db.auditLog.findMany({ where: { entityType: "Issue", entityId: issueId, action: "ISSUE_ACTION" }, select: { after: true } })
+    return log.some((l) => (l.after as { shortShipped?: boolean } | null)?.shortShipped)
   }
 
   /** Why an order cannot be taken off its trip right now, or null when it can. */

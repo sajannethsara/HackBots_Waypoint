@@ -7,7 +7,6 @@ import { Bell, BellOff, CheckCheck } from "lucide-react"
 import type { StoreNotification } from "@waypoint/shared"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { timeAgo } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -63,7 +62,7 @@ export function NotificationBell() {
             <p className="text-xs text-muted-foreground">New updates about your orders and deliveries show up here.</p>
           </div>
         ) : (
-          <ScrollArea className="max-h-96">
+          <div className="max-h-96 overflow-y-auto overscroll-contain">
             <ul>
               {data.items.map((n) => (
                 <li key={n.id} className="border-b last:border-b-0">
@@ -78,7 +77,7 @@ export function NotificationBell() {
                 </li>
               ))}
             </ul>
-          </ScrollArea>
+          </div>
         )}
         <div className="border-t px-3 py-2">
           <Link href="/store-manager/settings" onClick={() => setOpen(false)} className="text-xs text-primary hover:underline">

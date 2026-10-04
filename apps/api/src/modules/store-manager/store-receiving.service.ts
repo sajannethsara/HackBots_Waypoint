@@ -28,8 +28,9 @@ import { ClockService } from "../../common/clock.service"
 import { PrismaService } from "../../common/prisma.service"
 import { IssuesService } from "../issues/issues.service"
 import { LiveService } from "../live/live.service"
-import { MediaStorage } from "../media/media.module"
 
+const MAX_PHOTO_BYTES = 600_000 // the browser compresses to ~100-300 KB; this is a safety cap
+const PHOTO_MIME = ["image/jpeg", "image/png", "image/webp"]
 const EXCLUDED = ["DRAFT", "CANCELLED"] as const
 const FINISHED = ["DELIVERED", "PARTIAL", "REFUSED", "RECEIVED"] as const
 
@@ -90,7 +91,6 @@ export class StoreReceivingService {
     private readonly clock: ClockService,
     private readonly live: LiveService,
     private readonly issues: IssuesService,
-    private readonly storage: MediaStorage,
   ) {}
 
   private outletOf(user: SessionUser) {
@@ -374,8 +374,12 @@ export class StoreReceivingService {
       throw new ConflictException("You can report a problem once the delivery has arrived.")
     const line = input.orderLineId ? order.lines.find((l) => l.id === input.orderLineId) : undefined
     if (input.orderLineId && !line) throw new UnprocessableEntityException({ message: "Issue not accepted", violations: [{ rule: "LINE", message: "That line is not part of this order." }] })
-    if (input.photoId && !(await this.db.mediaAsset.findUnique({ where: { id: input.photoId }, select: { id: true } })))
-      throw new UnprocessableEntityException({ message: "Issue not accepted", violations: [{ rule: "PHOTO", message: "The photo did not upload. Try attaching it again." }] })
+    const photoIds = [...new Set(input.photoIds ?? [])]
+    if (photoIds.length) {
+      const found = await this.db.mediaAsset.findMany({ where: { id: { in: photoIds }, kind: "PHOTO", issuePhoto: null, issues: { none: {} } }, select: { id: true } })
+      if (found.length !== photoIds.length)
+          throw new UnprocessableEntityException({ message: "Issue not accepted", violations: [{ rule: "PHOTO", message: "A photo did not upload. Try attaching it again." }] })
+    }
 
     const stop = await this.db.stop.findFirst({ where: { orderId, trip: { plan: { status: "PUBLISHED" } } }, select: { id: true, tripId: true } })
     const issue = await this.issues.create(user, {
@@ -390,8 +394,9 @@ export class StoreReceivingService {
       outletId,
       tripId: stop?.tripId,
       stopId: stop?.id,
-      ...(input.photoId ? { photoId: input.photoId } : {}),
+      ...(photoIds.length ? { photoId: photoIds[0] } : {}),
     } as Parameters<IssuesService["create"]>[1])
+    if (photoIds.length) await this.db.issuePhoto.createMany({ data: photoIds.map((mediaId, position) => ({ issueId: issue.id, mediaId, position })) })
     return { id: issue.id, ref: issue.ref, type: issue.type }
   }
 
@@ -454,6 +459,7 @@ export class StoreReceivingService {
         resolution: true,
         resolvedAt: true,
         photoId: true,
+        photos: { orderBy: { position: "asc" }, select: { mediaId: true } },
         order: { select: { id: true, ref: true } },
         orderLine: { select: { description: true } },
         reportedBy: { select: { name: true } },
@@ -473,7 +479,7 @@ export class StoreReceivingService {
       resolvedAt: i.resolvedAt?.toISOString() ?? null,
       resolvedBy: i.resolvedBy?.name ?? null,
       reportedBy: i.reportedBy.name,
-      photoId: i.photoId,
+      photoIds: i.photos.length ? i.photos.map((p) => p.mediaId) : i.photoId ? [i.photoId] : [],
       timeline: audit.map((a) => ({ id: a.id, action: a.action, at: a.createdAt.toISOString(), actor: a.actor?.name ?? "System" })),
     }
   }
@@ -481,17 +487,18 @@ export class StoreReceivingService {
   // ───────────────────────────── Media ─────────────────────────────
 
   /**
-   * Issue photo evidence. The image goes to the uploads folder (`store/<outlet>/<date>/<id>.jpg`, see MediaStorage);
-   * the database keeps only the record that points at it.
+   * Issue photo evidence. The compressed image is stored directly in Postgres (`MediaAsset.data`),
+   * so it survives redeploys and is backed up with the rest of the data.
    */
   async saveMedia(user: SessionUser, input: DriverMediaInput): Promise<StoreMediaSaved> {
-    const outletId = this.outletOf(user)
+    this.outletOf(user)
     const bytes = Buffer.from(input.data, "base64")
     if (!bytes.length) throw new UnprocessableEntityException({ message: "Photo not accepted", violations: [{ rule: "EMPTY", message: "The photo is empty." }] })
+    if (bytes.length > MAX_PHOTO_BYTES) throw new UnprocessableEntityException({ message: "Photo not accepted", violations: [{ rule: "SIZE", message: "The photo is too large. Try a smaller one." }] })
+    if (!PHOTO_MIME.includes(input.mimeType)) throw new UnprocessableEntityException({ message: "Photo not accepted", violations: [{ rule: "TYPE", message: "Only JPEG, PNG or WebP photos can be uploaded." }] })
     const existing = await this.db.mediaAsset.findUnique({ where: { id: input.id }, select: { id: true } })
     if (!existing) {
-      const filePath = await this.storage.save({ id: input.id, mimeType: input.mimeType, bytes, folder: `store/${outletId}/${toDateOnly(new Date())}` })
-      await this.db.mediaAsset.create({ data: { id: input.id, kind: "PHOTO", mimeType: input.mimeType, sizeBytes: bytes.length, data: Buffer.alloc(0), filePath } })
+      await this.db.mediaAsset.create({ data: { id: input.id, kind: "PHOTO", mimeType: input.mimeType, sizeBytes: bytes.length, data: bytes } })
     }
     return { id: input.id, sizeBytes: bytes.length }
   }

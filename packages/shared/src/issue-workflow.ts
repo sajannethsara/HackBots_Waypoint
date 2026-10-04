@@ -8,7 +8,7 @@ import type { Role } from "./constants"
  * dispatcher can bring into the issue chat. Shared by the API (validation) and the issue page.
  */
 
-export const ISSUE_ACTION_IDS = ["defer-order", "vehicle-out-of-service", "vehicle-return", "short-ship"] as const
+export const ISSUE_ACTION_IDS = ["defer-order", "vehicle-out-of-service", "vehicle-return", "short-ship", "carry-over"] as const
 export type IssueActionId = (typeof ISSUE_ACTION_IDS)[number]
 
 export const issueActionSchema = z.discriminatedUnion("action", [
@@ -16,8 +16,12 @@ export const issueActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("vehicle-out-of-service"), deferRemaining: z.boolean().default(false), note: z.string().trim().max(500).optional() }),
   z.object({ action: z.literal("vehicle-return"), note: z.string().trim().max(500).optional() }),
   z.object({ action: z.literal("short-ship"), note: z.string().trim().max(500).optional() }),
+  z.object({ action: z.literal("carry-over"), shortShip: z.boolean().default(false), note: z.string().trim().max(500).optional() }),
 ])
 export type IssueActionInput = z.infer<typeof issueActionSchema>
+
+/** Item problems whose units dispatch can re-send to the outlet on a carry-over order. */
+export const CARRY_OVER_ISSUE_TYPES = ["LOAD_MISSING", "LOAD_DAMAGED", "RECEIPT_MISSING", "RECEIPT_DAMAGED", "RECEIPT_WRONG_ITEMS"] as const satisfies readonly IssueType[]
 
 export const issueChatInviteSchema = z.object({ userId: z.string().min(1) })
 export type IssueChatInviteInput = z.infer<typeof issueChatInviteSchema>
@@ -54,6 +58,8 @@ export interface IssueActionOption {
   /** For "vehicle-out-of-service": how many pending stops could be deferred with it. */
   pendingStops?: number
   defaultReason?: DeferralReason
+  /** For "carry-over": the original order has not left yet, so the units can also come off it (ship short). */
+  canShortShip?: boolean
 }
 
 export interface IssueActionTaken {

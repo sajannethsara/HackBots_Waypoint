@@ -54,6 +54,11 @@ export class ChatController {
     return this.chat.markRead(user, id)
   }
 
+  @Post("conversations/:id/clear")
+  clear(@CurrentUser() user: SessionUser, @Param("id") id: string) {
+    return this.chat.clear(user, id)
+  }
+
   @Get("mentions")
   mentions(@CurrentUser() user: SessionUser, @Query("conversationId") conversationId?: string, @Query("q") q?: string, @Query("type") type?: string) {
     return this.chat.mentionOptions(user, { conversationId, q, type })

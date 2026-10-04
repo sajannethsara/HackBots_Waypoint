@@ -20,6 +20,8 @@ import { VehiclesModule } from "./modules/vehicles/vehicles.module"
 import { OrdersModule } from "./modules/orders/orders.module"
 import { StoreModule } from "./modules/store-manager/store.module"
 import { PlanningModule } from "./modules/planning/planning.module"
+import { GateModule } from "./modules/planning/gate.module"
+import { ExceptionsModule } from "./modules/planning/exceptions.module"
 import { ReferenceModule } from "./modules/reference/reference.module"
 
 @Module({
@@ -37,6 +39,8 @@ import { ReferenceModule } from "./modules/reference/reference.module"
     DashboardModule,
     OrdersModule,
     PlanningModule,
+    GateModule,
+    ExceptionsModule,
     LiveModule,
     IssuesModule,
     IssueChatModule,

@@ -28,12 +28,25 @@ function LoginForm() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Remembered between sign-ins; only dispatchers are affected.
+  const [demo, setDemo] = useState(() => {
+    try {
+      return localStorage.getItem("wp.demo") === "1"
+    } catch {
+      return false
+    }
+  })
 
   async function signIn(e: string, p: string) {
     setBusy(true)
     setError(null)
     try {
       const { user } = await api<{ user: { role: Role } }>("/auth/login", { method: "POST", json: { email: e, password: p } })
+      try {
+        localStorage.setItem("wp.demo", demo ? "1" : "0")
+      } catch {}
+      // Demo mode is a dispatcher setting: signing in decides whether the system replays a day or runs for real.
+      if (user.role === "DISPATCHER") await api("/demo", { method: "POST", json: { on: demo, fresh: demo } }).catch(() => {})
       const next = params.get("next")
       const target = next && next.startsWith(HOME[user.role]) ? next : HOME[user.role]
       // The driver app is an installable, offline-capable page: load it fresh so its service worker takes control.
@@ -73,6 +86,14 @@ function LoginForm() {
             </Button>
           </FieldGroup>
         </form>
+
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm">
+          <input type="checkbox" checked={demo} onChange={(e) => setDemo(e.target.checked)} className="mt-0.5 accent-primary" />
+          <span className="grid gap-0.5">
+            <span className="font-medium">Demo player</span>
+            <span className="text-xs text-muted-foreground">Dispatchers only. Replays a day of events once a plan is published. Off: real mode.</span>
+          </span>
+        </label>
 
         <div className="grid gap-2">
           <p className="text-xs text-muted-foreground">Demo accounts · password {DEMO_PASSWORD}</p>

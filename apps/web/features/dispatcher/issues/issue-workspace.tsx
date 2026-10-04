@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Ban, Bell, CalendarClock, Check, CheckCircle2, ChevronRight, Eye, PackageMinus, Truck, Wrench } from "lucide-react"
+import { Ban, Bell, CalendarClock, Check, CheckCircle2, ChevronRight, Eye, PackageMinus, PackagePlus, Truck, Wrench } from "lucide-react"
 import { DEFERRAL_REASONS, DEFERRAL_REASON_META, ISSUE_TYPE_META, type DeferralReason, type IssueActionOption } from "@waypoint/shared"
 import { TONE } from "@/components/shared/badges"
 import { Button } from "@/components/ui/button"
@@ -33,7 +33,7 @@ export function IssueWorkspace({ issue }: { issue: IssueDetail }) {
   const [tab, setTab] = useState(() => (resolved ? "resolve" : "chat"))
 
   return (
-    <Card size="sm" className="h-fit gap-0 overflow-hidden p-0 xl:sticky xl:top-18">
+    <Card size="sm" className="h-fit gap-0 overflow-hidden p-0">
       <StatusSteps issue={issue} />
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className="gap-0">
         <div className="border-b px-3 py-2">
@@ -101,7 +101,7 @@ function StatusSteps({ issue }: { issue: IssueDetail }) {
 
 // ───────────────────────────── Decisions ─────────────────────────────
 
-const ACTION_ICON = { "defer-order": CalendarClock, "vehicle-out-of-service": Wrench, "vehicle-return": Truck, "short-ship": PackageMinus } as const
+const ACTION_ICON = { "defer-order": CalendarClock, "vehicle-out-of-service": Wrench, "vehicle-return": Truck, "short-ship": PackageMinus, "carry-over": PackagePlus } as const
 
 function Decisions({ issue }: { issue: IssueDetail }) {
   const { data, isLoading, isError, refetch } = useIssueActions(issue.id)
@@ -177,12 +177,16 @@ function DecisionDialog({ issue, action, onClose }: { issue: IssueDetail; action
   const [reason, setReason] = useState<DeferralReason | null>(null)
   const [note, setNote] = useState("")
   const [deferRemaining, setDeferRemaining] = useState(false)
+  // null = untouched: ship short by default whenever the original order has not left yet.
+  const [shortShip, setShortShip] = useState<boolean | null>(null)
   const chosen = reason ?? action?.defaultReason ?? "OTHER"
+  const alsoShortShip = shortShip ?? !!action?.canShortShip
 
   const close = () => {
     setReason(null)
     setNote("")
     setDeferRemaining(false)
+    setShortShip(null)
     onClose()
   }
 
@@ -196,7 +200,9 @@ function DecisionDialog({ issue, action, onClose }: { issue: IssueDetail; action
           ? ({ action: "vehicle-out-of-service", deferRemaining, note: n } as const)
           : action.id === "vehicle-return"
             ? ({ action: "vehicle-return", note: n } as const)
-            : ({ action: "short-ship", note: n } as const)
+            : action.id === "carry-over"
+              ? ({ action: "carry-over", shortShip: alsoShortShip, note: n } as const)
+              : ({ action: "short-ship", note: n } as const)
     run.mutate(input, { onSuccess: close })
   }
 
@@ -242,6 +248,20 @@ function DecisionDialog({ issue, action, onClose }: { issue: IssueDetail; action
               </label>
             )}
 
+            {action.id === "carry-over" && (
+              <label className={cn("flex items-start gap-2.5 rounded-lg border p-3", action.canShortShip ? "cursor-pointer" : "opacity-60")}>
+                <Checkbox checked={alsoShortShip} disabled={!action.canShortShip} onCheckedChange={(c) => setShortShip(c === true)} className="mt-0.5" />
+                <span className="grid text-sm">
+                  <span className="font-medium">Also ship the original order short</span>
+                  <span className="text-xs text-muted-foreground">
+                    {action.canShortShip
+                      ? `Takes the units off ${issue.order?.ref ?? "the original order"} so its load and the store's expectation match what is on the truck.`
+                      : "Not needed: the original order was already delivered or shipped short."}
+                  </span>
+                </span>
+              </label>
+            )}
+
             <div className="grid gap-1.5">
               <p className="text-xs font-medium">Note (optional)</p>
               <Textarea value={note} onChange={(e) => setNote(e.target.value.slice(0, 500))} rows={2} placeholder="Anything the store or the driver should know" />
@@ -251,9 +271,17 @@ function DecisionDialog({ issue, action, onClose }: { issue: IssueDetail; action
               <Button variant="outline" onClick={close} disabled={run.isPending}>
                 Cancel
               </Button>
-              <Button onClick={confirm} disabled={run.isPending} variant={action.id === "vehicle-return" ? "default" : "destructive"}>
+              <Button onClick={confirm} disabled={run.isPending} variant={action.id === "vehicle-return" || action.id === "carry-over" ? "default" : "destructive"}>
                 {run.isPending && <Spinner />}
-                {action.id === "defer-order" ? "Defer and remove from trip" : action.id === "vehicle-out-of-service" ? "Take out of service" : action.id === "vehicle-return" ? "Return to service" : "Ship short"}
+                {action.id === "defer-order"
+                  ? "Defer and remove from trip"
+                  : action.id === "vehicle-out-of-service"
+                    ? "Take out of service"
+                    : action.id === "vehicle-return"
+                      ? "Return to service"
+                      : action.id === "carry-over"
+                        ? "Carry over"
+                        : "Ship short"}
               </Button>
             </DialogFooter>
           </>

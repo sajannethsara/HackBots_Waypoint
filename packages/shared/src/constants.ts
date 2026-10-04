@@ -45,3 +45,6 @@ export const RULES = {
 
 export const DEPOTS = ["PELIYAGODA", "KANDY"] as const
 export type DepotId = (typeof DEPOTS)[number]
+
+/** After both crew claim a trip the gate opens by itself this long later, unless the dispatcher holds it. */
+export const GATE_AUTO_START_MS = 60_000
