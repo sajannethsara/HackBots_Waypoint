@@ -418,8 +418,8 @@ function LoadList({
             </Button>
           </div>
         </div>
-        {/* No inner scroller: the page scrolls normally (wheel/touch anywhere); the finish bar is sticky. */}
-        <ol className="grid gap-2 p-3">
+        {/* Long loading sequences scroll inside the card so the header and the finish bar stay in view on tablets. */}
+        <ol className="grid max-h-[65dvh] gap-2 overflow-y-auto overscroll-contain p-3 [-webkit-overflow-scrolling:touch] md:max-h-[calc(100dvh-16rem)]">
           {order.map((s, i) => (
             <StopRow
               key={s.id}
@@ -908,7 +908,7 @@ function StopRow({
         </Button>
         <label
           className={cn(
-            "flex h-8 w-36 items-center justify-start gap-2 rounded-md border px-3 text-sm leading-none font-medium whitespace-nowrap pointer-coarse:h-11",
+            "flex h-8 w-36 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium whitespace-nowrap pointer-coarse:h-11",
             stowed
               ? cn("ring-1 ring-inset", TONE.green, "border-transparent")
               : canLoad
@@ -1019,7 +1019,7 @@ function LineControls({
       </Button>
       <label
         className={cn(
-          "flex h-8 items-center justify-start gap-2 rounded-md border px-3 text-sm leading-none font-medium whitespace-nowrap pointer-coarse:h-11",
+          "flex h-8 items-center justify-center gap-2 rounded-md border px-2.5 text-sm font-medium whitespace-nowrap pointer-coarse:h-11",
           stretch ? "w-full" : "w-36",
           item.done
             ? cn("border-transparent ring-1 ring-inset", TONE.green)
