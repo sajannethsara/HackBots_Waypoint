@@ -47,6 +47,11 @@ export class ChatGateway implements OnGatewayConnection {
     this.server?.to([DISPATCHERS_ROOM, ...userIds.map(userRoom)]).emit(event, payload)
   }
 
+  /** Deliver to one side of a conversation only: the desk, or the member. */
+  publishToSide(conv: { depotId: string; memberId: string }, side: "desk" | "member", event: "cleared", payload: unknown) {
+    this.server?.to(side === "desk" ? deskRoom(conv.depotId) : userRoom(conv.memberId)).emit(event, payload)
+  }
+
   /** Deliver to the depot's dispatch desk and to the member on the other side. */
   publish(conv: { depotId: string; memberId: string }, event: "message" | "read", payload: unknown) {
     this.server?.to([deskRoom(conv.depotId), userRoom(conv.memberId)]).emit(event, payload)
