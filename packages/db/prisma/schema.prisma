@@ -804,6 +804,7 @@ model Issue {
   updatedAt        DateTime      @updatedAt @db.Timestamptz
   resolvedAt       DateTime?     @db.Timestamptz
   chat             IssueChat?
+  agent            IssueAgent?
 
   conversations Conversation[]
 
@@ -1007,4 +1008,78 @@ model IssueChatMessage {
   createdAt DateTime    @default(now()) @db.Timestamptz
 
   @@index([chatId, createdAt])
+}
+
+// ──────────────────────────── Issue agent ────────────────────────────
+
+enum AgentStatus {
+  IDLE // never asked, or stopped by dispatch
+  THINKING // a run is in progress
+  WAITING // asked people in the issue chat; a reply wakes it
+  PLAN_READY // proposed steps wait for dispatch
+  DONE // the issue is resolved
+  FAILED // the last run could not finish (error is set)
+}
+
+enum AgentStepStatus {
+  PROPOSED
+  DONE
+  SKIPPED
+  FAILED
+  SUPERSEDED // replaced by a newer plan before dispatch acted on it
+}
+
+// The AI assistant working one issue for dispatch. Each run rebuilds its context from the
+// database, so waiting for chat replies survives restarts.
+model IssueAgent {
+  id           String           @id @default(cuid())
+  issueId      String           @unique
+  issue        Issue            @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  status       AgentStatus      @default(IDLE)
+  diagnosis    String? // the agent's current read of the situation
+  waitingFor   String? // who it asked and why, while WAITING
+  waitingSince DateTime?        @db.Timestamptz
+  error        String?
+  plan         Int              @default(0) // number of the latest plan
+  runs         Int              @default(0)
+  lastRunAt    DateTime?        @db.Timestamptz
+  startedById  String?
+  createdAt    DateTime         @default(now()) @db.Timestamptz
+  updatedAt    DateTime         @updatedAt @db.Timestamptz
+  steps        IssueAgentStep[]
+  notes        IssueAgentNote[]
+}
+
+// One proposed step. Dispatch approves (optionally edited), or skips it; the outcome feeds the next run.
+model IssueAgentStep {
+  id          String          @id @default(cuid())
+  agentId     String
+  agent       IssueAgent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  plan        Int
+  seq         Int
+  kind        String // acknowledge | invite | decision | resolve
+  title       String
+  rationale   String
+  payload     Json
+  status      AgentStepStatus @default(PROPOSED)
+  edited      Boolean         @default(false)
+  result      String?
+  decidedById String?
+  decidedAt   DateTime?       @db.Timestamptz
+  createdAt   DateTime        @default(now()) @db.Timestamptz
+
+  @@index([agentId, plan, seq])
+}
+
+// The thread between dispatch and the agent: feedback, what the agent said in the chat, run outcomes.
+model IssueAgentNote {
+  id        String     @id @default(cuid())
+  agentId   String
+  agent     IssueAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  kind      String // FEEDBACK (dispatch) | CHAT (agent posted in the issue chat) | RUN (outcome of a run)
+  body      String
+  authorId  String?
+  createdAt DateTime   @default(now()) @db.Timestamptz
+
+  @@index([agentId, createdAt])
 }
