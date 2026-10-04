@@ -163,9 +163,8 @@ export class LoaderService {
     const result = await this.db.$transaction(async (tx) => {
       const claimedAt = new Date()
       const updated = await tx.trip.updateMany({
-        // loaderId/loaderClaimedAt are the depot gate's claim: set here too so dispatch sees this loader, and skip a trip another loader already took at the gate.
-        where: { id: tripId, claimedById: null, status: "PLANNED", plan: { depotId, status: "PUBLISHED" }, OR: [{ loaderId: null }, { loaderId: user.sub }] },
-        data: { claimedById: user.sub, claimedAt, status: "LOADING", loaderId: user.sub, loaderClaimedAt: claimedAt },
+        where: { id: tripId, claimedById: null, status: "PLANNED", plan: { depotId, status: "PUBLISHED" } },
+        data: { claimedById: user.sub, claimedAt, status: "LOADING" },
       })
       if (updated.count === 0) throw new ConflictException("Trip is already claimed or not available")
       await tx.auditLog.create({
@@ -193,7 +192,7 @@ export class LoaderService {
       await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${tripId} FOR UPDATE`
       const updated = await tx.trip.updateMany({
         where: { id: tripId, claimedById: user.sub, status: "LOADING", stops: { none: { loadStatus: "STOWED" } } },
-        data: { claimedById: null, claimedAt: null, status: "PLANNED", loaderId: null, loaderClaimedAt: null },
+        data: { claimedById: null, claimedAt: null, status: "PLANNED" },
       })
       if (updated.count === 0) {
         // Say why: held by me but already part-loaded, or not mine to give back.

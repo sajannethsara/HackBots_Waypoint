@@ -39,11 +39,11 @@ export class GateService implements OnModuleInit, OnModuleDestroy {
       const clock = this.clock.now()
       if (!clock.running) return
       const claimed = await this.db.trip.findMany({
-        where: { liveAt: null, heldAt: null, status: "LOADED", driverClaimedAt: { not: null }, loaderClaimedAt: { not: null }, plan: { status: "PUBLISHED" } },
-        select: { id: true, driverClaimedAt: true, loaderClaimedAt: true, loadedAt: true },
+        where: { liveAt: null, heldAt: null, driverClaimedAt: { not: null }, loaderClaimedAt: { not: null }, plan: { status: "PUBLISHED" } },
+        select: { id: true, driverClaimedAt: true, loaderClaimedAt: true },
       })
       for (const t of claimed) {
-        const since = Date.now() - Math.max(t.driverClaimedAt!.getTime(), t.loaderClaimedAt!.getTime(), t.loadedAt?.getTime() ?? 0)
+        const since = Date.now() - Math.max(t.driverClaimedAt!.getTime(), t.loaderClaimedAt!.getTime())
         if ((since / 60_000) * clock.speed >= 1) await this.goLive(t.id, null)
       }
       return
@@ -52,10 +52,8 @@ export class GateService implements OnModuleInit, OnModuleDestroy {
       where: {
         liveAt: null,
         heldAt: null,
-        status: "LOADED",
         driverClaimedAt: { not: null, lte: new Date(Date.now() - GATE_AUTO_START_MS) },
         loaderClaimedAt: { not: null, lte: new Date(Date.now() - GATE_AUTO_START_MS) },
-        loadedAt: { not: null, lte: new Date(Date.now() - GATE_AUTO_START_MS) },
         plan: { status: "PUBLISHED" },
       },
       select: { id: true },
@@ -85,8 +83,6 @@ export class GateService implements OnModuleInit, OnModuleDestroy {
   async claim(user: SessionUser, tripId: string, on: boolean) {
     const trip = await this.openTrip(tripId)
     if (trip.liveAt) throw new ConflictException("This trip is already live")
-    // Once loading has started the claim belongs to the loader app: hand the trip back from the vehicle's load list.
-    if (user.role === "LOADER" && !on && trip.status !== "PLANNED") throw new ConflictException("Loading has started: hand the trip back from the vehicle's load list")
     const data =
       user.role === "DRIVER"
         ? trip.driverId === user.sub || (user.vehicleId && trip.vehicleId === user.vehicleId)
@@ -129,7 +125,6 @@ export class GateService implements OnModuleInit, OnModuleDestroy {
     const trip = await this.openTrip(tripId)
     if (trip.liveAt) return { ok: true }
     if (!trip.driverClaimedAt || !trip.loaderClaimedAt) throw new BadRequestException("Both the driver and the loader must claim the trip first")
-    if (trip.status !== "LOADED") throw new BadRequestException("The loader has not finished loading this trip yet")
     await this.goLive(tripId, user.sub)
     return { ok: true }
   }
