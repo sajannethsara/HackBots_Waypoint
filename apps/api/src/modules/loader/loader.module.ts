@@ -162,9 +162,11 @@ export class LoaderService {
     const depotId = user.depotId
     const result = await this.db.$transaction(async (tx) => {
       const claimedAt = new Date()
+      // Taking the trip here is also the loader's claim at the depot gate (loaderId/loaderClaimedAt), which the
+      // dispatcher's planning table and Start button read. A trip another loader claimed at the gate stays theirs.
       const updated = await tx.trip.updateMany({
-        where: { id: tripId, claimedById: null, status: "PLANNED", plan: { depotId, status: "PUBLISHED" } },
-        data: { claimedById: user.sub, claimedAt, status: "LOADING" },
+        where: { id: tripId, claimedById: null, status: "PLANNED", plan: { depotId, status: "PUBLISHED" }, OR: [{ loaderId: null }, { loaderId: user.sub }] },
+        data: { claimedById: user.sub, claimedAt, status: "LOADING", loaderId: user.sub, loaderClaimedAt: claimedAt },
       })
       if (updated.count === 0) throw new ConflictException("Trip is already claimed or not available")
       await tx.auditLog.create({
@@ -192,7 +194,8 @@ export class LoaderService {
       await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${tripId} FOR UPDATE`
       const updated = await tx.trip.updateMany({
         where: { id: tripId, claimedById: user.sub, status: "LOADING", stops: { none: { loadStatus: "STOWED" } } },
-        data: { claimedById: null, claimedAt: null, status: "PLANNED" },
+        // Handing it back also frees the gate claim, so another loader can take it.
+        data: { claimedById: null, claimedAt: null, status: "PLANNED", loaderId: null, loaderClaimedAt: null },
       })
       if (updated.count === 0) {
         // Say why: held by me but already part-loaded, or not mine to give back.
