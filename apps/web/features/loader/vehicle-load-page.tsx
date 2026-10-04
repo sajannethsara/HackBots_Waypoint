@@ -909,7 +909,7 @@ function StopRow({
         </Button>
         <label
           className={cn(
-            "flex h-8 w-36 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium whitespace-nowrap pointer-coarse:h-11",
+            "flex h-8 w-36 items-center justify-start gap-2 rounded-md border px-3 text-sm leading-none font-medium whitespace-nowrap pointer-coarse:h-11",
             stowed
               ? cn("ring-1 ring-inset", TONE.green, "border-transparent")
               : canLoad
@@ -1020,7 +1020,7 @@ function LineControls({
       </Button>
       <label
         className={cn(
-          "flex h-8 items-center justify-center gap-2 rounded-md border px-2.5 text-sm font-medium whitespace-nowrap pointer-coarse:h-11",
+          "flex h-8 items-center justify-start gap-2 rounded-md border px-3 text-sm leading-none font-medium whitespace-nowrap pointer-coarse:h-11",
           stretch ? "w-full" : "w-36",
           item.done
             ? cn("border-transparent ring-1 ring-inset", TONE.green)
