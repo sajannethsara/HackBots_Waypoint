@@ -44,6 +44,9 @@ const planInclude = {
       district: { select: { id: true, centroidLat: true, centroidLng: true } },
       driver: { select: { id: true, name: true } },
       loader: { select: { id: true, name: true } },
+      // Who is loading / loaded it in the loader app, for the gate table's loader column.
+      claimedBy: { select: { id: true, name: true } },
+      loadedBy: { select: { id: true, name: true } },
       stops: {
         orderBy: { seq: "asc" },
         include: {

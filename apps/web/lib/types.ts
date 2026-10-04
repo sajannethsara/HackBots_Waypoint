@@ -100,6 +100,8 @@ export interface Stop {
   atRisk: boolean
   riskReason: string | null
   status: string
+  /** Loader's checklist for this stop: PENDING, STOWED or FLAGGED. */
+  loadStatus?: "PENDING" | "STOWED" | "FLAGGED"
   order: {
     id: string
     ref: string
@@ -130,6 +132,11 @@ export interface Trip {
   loadVolumeM3: number
   driver: { id: string; name: string } | null
   loader: { id: string; name: string } | null
+  /** Loader app: who took the trip for loading, and who finished it. */
+  claimedBy?: { id: string; name: string } | null
+  claimedAt?: string | null
+  loadedBy?: { id: string; name: string } | null
+  loadedAt?: string | null
   /** Depot gate */
   driverClaimedAt: string | null
   loaderClaimedAt: string | null
