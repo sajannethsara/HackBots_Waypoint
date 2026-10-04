@@ -82,7 +82,7 @@ export class DemoDirector implements OnModuleInit, OnModuleDestroy {
     if (ids.length)
       await this.db.trip.updateMany({
         where: { id: { in: ids }, departedAt: null },
-        data: { driverClaimedAt: null, loaderClaimedAt: null, loaderId: null, heldAt: null, liveAt: null },
+        data: { driverClaimedAt: null, loaderClaimedAt: null, loaderId: null, heldAt: null, liveAt: null, status: "PLANNED", loadedAt: null },
       })
     await this.issues.clearSystem("demo-")
     await this.demo.clear()
@@ -148,7 +148,7 @@ export class DemoDirector implements OnModuleInit, OnModuleDestroy {
             await this.db.trip.updateMany({ where: { id: t.id, liveAt: null }, data: { driverClaimedAt: now, ...(driver ? { driverId: driver } : {}) } })
           } else {
             const l = loaders[idx % Math.max(1, loaders.length)]
-            await this.db.trip.updateMany({ where: { id: t.id, liveAt: null }, data: { loaderClaimedAt: now, ...(l ? { loaderId: l.id } : {}) } })
+            await this.db.trip.updateMany({ where: { id: t.id, liveAt: null }, data: { loaderClaimedAt: now, status: "LOADED", loadedAt: now, ...(l ? { loaderId: l.id } : {}) } })
           }
           this.demo.touch(t.id)
         },
