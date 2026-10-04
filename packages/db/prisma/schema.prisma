@@ -416,39 +416,42 @@ model RoadCondition {
 // ─────────────────────────────── Identity ───────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  phone        String?
-  passwordHash String
-  role         Role
-  depotId      String? // dispatcher / loader scope
-  depot        Depot?   @relation(fields: [depotId], references: [id])
-  outletId     String? // store manager scope
-  outlet       Outlet?  @relation(fields: [outletId], references: [id])
-  vehicleId    String?  @unique // driver's assigned vehicle
-  vehicle      Vehicle? @relation("DriverVehicle", fields: [vehicleId], references: [id])
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now()) @db.Timestamptz
+  id                String   @id @default(cuid())
+  email             String   @unique
+  name              String
+  phone             String?
+  passwordHash      String
+  role              Role
+  depotId           String? // dispatcher / loader scope
+  depot             Depot?   @relation(fields: [depotId], references: [id])
+  outletId          String? // store manager scope
+  outlet            Outlet?  @relation(fields: [outletId], references: [id])
+  vehicleId         String?  @unique // driver's assigned vehicle
+  vehicle           Vehicle? @relation("DriverVehicle", fields: [vehicleId], references: [id])
+  isActive          Boolean  @default(true)
+  notificationPrefs Json? // per-user notification toggles; null = defaults
+  createdAt         DateTime @default(now()) @db.Timestamptz
 
-  ordersCreated     Order[]            @relation("OrderCreatedBy")
-  plansPublished    Plan[]             @relation("PlanPublishedBy")
-  decisionsMade     PlanDecision[]     @relation("DecisionOverriddenBy")
-  tripsLoaded       Trip[]             @relation("TripLoadedBy")
-  tripsClaimed      Trip[]             @relation("TripClaimedBy")
-  linesCounted      LoadLine[]         @relation("LoadLineCountedBy")
-  tripsDriven       Trip[]             @relation("TripDriver")
+  ordersCreated     Order[]               @relation("OrderCreatedBy")
+  plansPublished    Plan[]                @relation("PlanPublishedBy")
+  decisionsMade     PlanDecision[]        @relation("DecisionOverriddenBy")
+  tripsLoaded       Trip[]                @relation("TripLoadedBy")
+  tripsClaimed      Trip[]                @relation("TripClaimedBy")
+  linesCounted      LoadLine[]            @relation("LoadLineCountedBy")
+  changesRequested  OutletChangeRequest[] @relation("ChangeRequestedBy")
+  changesDecided    OutletChangeRequest[] @relation("ChangeDecidedBy")
+  tripsDriven       Trip[]                @relation("TripDriver")
   deliveryEvents    DeliveryEvent[]
   locations         DriverLocation[]
   issueChatMembers  IssueChatMember[]
   issueChatMessages IssueChatMessage[]
-  issuesReported    Issue[]            @relation("IssueReportedBy")
-  issuesResolved    Issue[]            @relation("IssueResolvedBy")
+  issuesReported    Issue[]               @relation("IssueReportedBy")
+  issuesResolved    Issue[]               @relation("IssueResolvedBy")
   receipts          Receipt[]
   notifications     Notification[]
   auditLogs         AuditLog[]
-  conversations     Conversation[]     @relation("ConversationMember")
-  messagesSent      Message[]          @relation("MessageSender")
+  conversations     Conversation[]        @relation("ConversationMember")
+  messagesSent      Message[]             @relation("MessageSender")
 }
 
 // ──────────────────────────────── Orders ────────────────────────────────
@@ -500,6 +503,8 @@ model LoadLine {
   countedAt   DateTime  @updatedAt @db.Timestamptz
 
   @@id([stopId, orderLineId])
+}
+
 // What a store can order. Unit weight/volume are calibrated to each brand's real average per unit.
 model Product {
   id           String          @id @default(cuid())
