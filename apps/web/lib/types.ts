@@ -377,6 +377,8 @@ export interface IssueDetail extends Omit<IssueRow, "trip" | "stop" | "order" | 
   vehicle: { id: string; type: string; temp: string; status: string } | null
   history: { id: string; action: string; createdAt: string; actor: { name: string } | null; after: Record<string, unknown> | null }[]
   playbook: IssuePlaybookAction[]
+  /** Photos the reporter attached, in upload order. Optional so an older API cannot crash the page. */
+  photos?: IssuePhotoAsset[]
 }
 
 export interface AuditEntry {
@@ -455,6 +457,14 @@ export interface TripDetail {
 }
 
 // ── Resource detail pages (vehicles, outlets, orders) ──
+
+/** One photo attached to an issue; the image itself is served by /api/media/:id. */
+export interface IssuePhotoAsset {
+  id: string
+  mimeType: string
+  sizeBytes: number
+  createdAt: string
+}
 
 /** Missing/damaged units of one issue, re-sent to the outlet on a carry-over order. */
 export interface CarriedItem {
